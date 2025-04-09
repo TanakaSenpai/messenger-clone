@@ -20,7 +20,7 @@ import { Picker } from "@react-native-picker/picker";
 import colors from "app/configs/colors";
 import { AuthStackParamList } from "app/navigation/types";
 import InputField from "app/components/form/InputField";
-import { Register } from "app/api/auth";
+import { Register, User } from "app/api/auth";
 import FormPicker from "app/components/form/FormPicker";
 import FormPhoneInput from "app/components/form/FormPhoneInput";
 
@@ -41,13 +41,13 @@ interface FormData {
 }
 
 const RegistrationScreen = () => {
-  const methods = useForm<FormData>();
+  const methods = useForm<User>();
   const navigation = useNavigation<RegistrationScreenNavigationProp>();
   // const [gender, setGender] = useState("");
   // const [phoneNumber, setPhoneNumber] = useState("");
   const [isLoading, setLoading] = useState(false);
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: User) => {
     setLoading(true);
     const formattedPhoneNumber = data.phoneNumber.startsWith("+8800")
       ? data.phoneNumber.replace("+8800", "+880")
@@ -78,7 +78,6 @@ const RegistrationScreen = () => {
     }
 
     if (result.error) {
-      console.log(result.error);
       // Customize messages for specific Firebase errors
       if (result.error.includes("email-already-in-use")) {
         errorMessage = "This email is already registered";

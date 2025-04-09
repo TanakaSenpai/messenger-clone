@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, TouchableOpacity, Text, Image, KeyboardAvoidingView, Platform } from "react-native";
+import { View, StyleSheet, TouchableOpacity, Text, Image, KeyboardAvoidingView, Platform, Alert } from "react-native";
 import { useForm, FormProvider } from "react-hook-form";
 import InputField from "../components/form/InputField";
 import colors from "app/configs/colors";
@@ -7,16 +7,28 @@ import { useNavigation } from "@react-navigation/native";
 import { AuthStackParamList } from "app/navigation/types";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { ScrollView } from "react-native";
+import { Login } from "app/api/auth";
+
+interface LoginData {
+  email: string;
+  password: string
+}
 
 type LoginScreenNavigationProp = StackNavigationProp<AuthStackParamList, "Login">;
 const MessengerLoginScreen = () => {
-  const methods = useForm();
+  const methods = useForm<LoginData>();
   const navigation = useNavigation<LoginScreenNavigationProp>();
 
-  const onSubmit = (data: any) => {
-    alert("Well done!")
-    console.log("Login Data: ", data);
+  const onSubmit = async (data: LoginData) => {
+    const result = await Login(data.email, data.password);
+    if (result!.success) {
+      alert("done")
+    } 
+    if (result!.error) {
+      Alert.alert("Error", result!.error)
+    }
   };
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.container}>
