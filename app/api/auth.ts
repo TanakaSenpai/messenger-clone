@@ -2,6 +2,7 @@ import { auth, db } from "app/configs/firebase";
 import { FirebaseError } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
   signInWithEmailAndPassword,
   updateProfile,
 } from "firebase/auth";
@@ -63,6 +64,12 @@ const Register = async (data: User) => {
 
 const Login = async (email: string, password: string) => {
   try {
+    const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+    
+    if (signInMethods.length === 0) {
+      // No sign-in methods for this email (email not found)
+      return { success: false, error: "Email not registered." };
+    }
     await signInWithEmailAndPassword(auth, email, password);
     return { success: true, user: auth.currentUser };
   } catch (error) {
