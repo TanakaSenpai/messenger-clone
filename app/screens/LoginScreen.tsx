@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { View, StyleSheet, TouchableOpacity, Text, Image, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from "react-native";
 import { useForm, FormProvider } from "react-hook-form";
 import InputField from "../components/form/InputField";
@@ -8,6 +8,7 @@ import { AuthStackParamList } from "app/navigation/types";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { ScrollView } from "react-native";
 import { Login } from "app/api/auth";
+import { AuthContext } from "app/auth/context";
 
 interface LoginData {
   email: string;
@@ -20,12 +21,14 @@ const MessengerLoginScreen = () => {
   const methods = useForm<LoginData>();
   const navigation = useNavigation<LoginScreenNavigationProp>();
 
+  const {user} = useContext(AuthContext);
+
   const onSubmit = async (data: LoginData) => {
     setLoading(true)
     const result = await Login(data.email, data.password);
     setLoading(false)
     if (result!.success) {
-      alert("done")
+      console.log(result!.user)
     } 
     if (result!.error) {
       Alert.alert("Error", result!.error)

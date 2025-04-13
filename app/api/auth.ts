@@ -3,10 +3,11 @@ import { FirebaseError } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
   fetchSignInMethodsForEmail,
+  onAuthStateChanged,
   signInWithEmailAndPassword,
   updateProfile,
 } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 export interface User {
   uid: string;
@@ -64,12 +65,12 @@ const Register = async (data: User) => {
 
 const Login = async (email: string, password: string) => {
   try {
-    const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+    // const signInMethods = await fetchSignInMethodsForEmail(auth, email);
     
-    if (signInMethods.length === 0) {
-      // No sign-in methods for this email (email not found)
-      return { success: false, error: "Email not registered." };
-    }
+    // if (signInMethods.length === 0) {
+    //   // No sign-in methods for this email (email not found)
+    //   return { success: false, error: "Email not registered." };
+    // }
     await signInWithEmailAndPassword(auth, email, password);
     return { success: true, user: auth.currentUser };
   } catch (error) {
@@ -85,4 +86,18 @@ const Login = async (email: string, password: string) => {
   }
 };
 
-export { Register, Login };
+const fetchUserData = async (userId: string): Promise<User | null> => {
+  try {
+    const userRef = await getDoc(doc(db, "userInfo", userId));
+    if (userRef.exists()) {
+      return userRef.data() as User;
+    } else {
+      return null; // Return null if no user data is found
+    }
+  } catch (error) {
+    console.error("Error fetching user data:", error);
+    return null; // In case of error, return null
+  }
+};
+
+export { Register, Login, fetchUserData };

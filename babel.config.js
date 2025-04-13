@@ -1,4 +1,3 @@
-// babel.config.js
 module.exports = {
   presets: ['babel-preset-expo'],
   plugins: [
@@ -9,5 +8,6 @@ module.exports = {
         path: '.env',
       },
     ],
+    'react-native-reanimated/plugin', // 👈 Must be LAST
   ],
 };
