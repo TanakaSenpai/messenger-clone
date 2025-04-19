@@ -36,7 +36,15 @@ const TabNavigator = () => {
         tabBarIcon: ({ color }) => <MaterialIcons name="web-stories" size={22} color={color} />
        }} />
        <Tab.Screen name="Menu" component={MenuScreen} options={{ 
-        tabBarIcon: ({color}) => <Ionicons name="menu" size={25} color={color} />
+        tabBarIcon: ({color}) => <Ionicons name="menu" size={25} color={color} />,
+        headerStyle: {
+          backgroundColor: colors.black,
+          
+        }, 
+        headerTitleStyle: {
+          fontSize: 24
+        },
+        headerTitleAlign: "left"
         }} />
     </Tab.Navigator>
   );
