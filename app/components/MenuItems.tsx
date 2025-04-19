@@ -16,7 +16,7 @@ interface Props {
     logo?: React.ReactNode;
     title: string;
     subtitle?: string;
-    onPress: () => void;
+    onPress?: () => void;
   }[];
 }
 
@@ -24,8 +24,13 @@ const MenuItems = ({ items }: Props) => {
   return (
     <View style={styles.container}>
       {items.map((item, index) => (
-        <> 
-      <TouchableHighlight key={index} underlayColor={colors.mediumGray} onPress={item.onPress}>
+        <>
+          <TouchableHighlight
+          disabled={item.onPress && false}
+            key={index}
+            underlayColor={colors.mediumGray}
+            onPress={item.onPress}
+          >
             <View style={styles.itemWrapper}>
               <View style={styles.imgLogoWrapper}>
                 {item.img && <Image source={item.img} style={styles.img} />}
@@ -33,7 +38,9 @@ const MenuItems = ({ items }: Props) => {
               </View>
               <View style={styles.titleContainer}>
                 <Text style={styles.title}>{item.title}</Text>
-                {item.subtitle && <Text>{item.subtitle}</Text>}
+                {item.subtitle && (
+                  <Text style={styles.subtitle}>{item.subtitle}</Text>
+                )}
               </View>
             </View>
           </TouchableHighlight>
@@ -46,9 +53,9 @@ const MenuItems = ({ items }: Props) => {
 
 const styles = StyleSheet.create({
   container: {
-    margin: 10,
+    margin: 15,
     borderRadius: 10,
-    marginBottom: 10,
+    marginBottom: 20,
     backgroundColor: colors.darkGray,
     overflow: "hidden",
   },
@@ -61,16 +68,21 @@ const styles = StyleSheet.create({
     width: 50,
     alignItems: "center",
   },
+  subtitle: {
+    color: colors.lightGray,
+    marginTop: 6,
+    fontSize: 13,
+  },
   itemWrapper: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
     paddingHorizontal: 5,
-    height: 60
+    height: 55,
   },
   title: {
     color: colors.white,
-    fontSize: 17,
+    fontSize: 16,
   },
   titleContainer: {
     marginLeft: 5,
