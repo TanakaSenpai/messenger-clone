@@ -1,18 +1,16 @@
-import { createContext, useEffect, useState } from "react";
+import { createContext } from "react";
 
-import { fetchUserData, User } from "app/api/auth";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "app/configs/firebase";
-import SplashScreen from "app/screens/SplashScreen";
+import { User } from "app/api/auth";
 
-// Define the context type
 type AuthContextType = {
   user: User | null;
+  setUser: (user: User | null) => void;
   loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  setUser: () => {},
   loading: true,
 });
 

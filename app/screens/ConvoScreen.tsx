@@ -9,7 +9,6 @@ import SendMsg from "app/components/giftedChat/SendMsg";
 import RnComposer from "app/components/giftedChat/Composer";
 import RnBubble from "app/components/giftedChat/Bubble";
 import RnAvatar from "app/components/giftedChat/Avatar";
-import colors from "app/configs/colors";
 
 const ConvoScreen = ({route}: {route: RouteProp<RootStackParamList, "Conversation">}) => {
   const [messages, setMessages] = useState<IMessage[]>([]);

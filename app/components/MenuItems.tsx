@@ -5,7 +5,9 @@ import {
   StyleSheet,
   Image,
   TouchableHighlight,
+  TextStyle,
 } from "react-native";
+import Feather from "react-native-vector-icons/Feather"
 
 import colors from "app/configs/colors";
 import Separator from "./Separator";
@@ -17,19 +19,24 @@ interface Props {
     title: string;
     subtitle?: string;
     onPress?: () => void;
+    titleStyles?: TextStyle;
+    subTitleStyles?: TextStyle;
+    showChevron?: boolean;
   }[];
 }
 
 const MenuItems = ({ items }: Props) => {
   return (
     <View style={styles.container}>
-      {items.map((item, index) => (
-        <>
+      {items.map((item, index) => {
+        const showChevron = item.showChevron !== false;
+        return (
+        <View key={index}>
           <TouchableHighlight
-          disabled={item.onPress && false}
-            key={index}
+          disabled={!item.onPress}
             underlayColor={colors.mediumGray}
             onPress={item.onPress}
+            accessibilityLabel={item.title}
           >
             <View style={styles.itemWrapper}>
               <View style={styles.imgLogoWrapper}>
@@ -37,16 +44,17 @@ const MenuItems = ({ items }: Props) => {
                 {item.logo && item.logo}
               </View>
               <View style={styles.titleContainer}>
-                <Text style={styles.title}>{item.title}</Text>
+                <Text style={[styles.title, item.titleStyles]}>{item.title}</Text>
                 {item.subtitle && (
-                  <Text style={styles.subtitle}>{item.subtitle}</Text>
+                  <Text style={[styles.subtitle, item.subTitleStyles]}>{item.subtitle}</Text>
                 )}
               </View>
+            { showChevron && <Feather name="chevron-right" size={24} color={colors.lightGray} />}
             </View>
           </TouchableHighlight>
           {index != items.length - 1 && <Separator />}
-        </>
-      ))}
+        </View>
+      )})}
     </View>
   );
 };
@@ -86,6 +94,7 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     marginLeft: 5,
+    flex: 1
   },
 });
 

@@ -14,13 +14,11 @@ import {
 import { useForm, FormProvider } from "react-hook-form";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import PhoneInput from "react-native-phone-number-input";
-import { Picker } from "@react-native-picker/picker";
 
 import colors from "app/configs/colors";
+import { Register, User } from "app/api/auth";
 import { AuthStackParamList } from "app/navigation/types";
 import InputField from "app/components/form/InputField";
-import { Register, User } from "app/api/auth";
 import FormPicker from "app/components/form/FormPicker";
 import FormPhoneInput from "app/components/form/FormPhoneInput";
 
@@ -43,8 +41,6 @@ interface FormData {
 const RegistrationScreen = () => {
   const methods = useForm<User>();
   const navigation = useNavigation<RegistrationScreenNavigationProp>();
-  // const [gender, setGender] = useState("");
-  // const [phoneNumber, setPhoneNumber] = useState("");
   const [isLoading, setLoading] = useState(false);
 
   const onSubmit = async (data: User) => {
@@ -112,6 +108,11 @@ const RegistrationScreen = () => {
               name="lastName"
               placeholder="Last Name"
               rules={{ required: "Last Name is required" }}
+            />
+            <InputField
+              name="username"
+              placeholder="Username"
+              rules={{ required: "Username is required" }}
             />
             <InputField
               name="address"

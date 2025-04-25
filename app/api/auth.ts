@@ -1,18 +1,21 @@
+import { AuthContext } from "app/auth/context";
 import { auth, db } from "app/configs/firebase";
 import { FirebaseError } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
-  fetchSignInMethodsForEmail,
-  onAuthStateChanged,
   signInWithEmailAndPassword,
+  signOut,
   updateProfile,
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { useContext } from "react";
 
 export interface User {
   uid: string;
   firstName: string;
   lastName: string;
+  username: string;
+  avatar: string;
   address: string;
   gender: string;
   phoneNumber: string;
@@ -43,6 +46,8 @@ const Register = async (data: User) => {
       uid: userCreds.user.uid,
       firstName: data.firstName,
       lastName: data.lastName,
+      username: data.username,
+      avatar: data.avatar,
       address: data.address,
       gender: data.gender,
       phoneNumber: data.phoneNumber,
@@ -100,4 +105,15 @@ const fetchUserData = async (userId: string): Promise<User | null> => {
   }
 };
 
-export { Register, Login, fetchUserData };
+const Logout = async () => {
+  try {
+    const {setUser} = useContext(AuthContext)
+    await signOut(auth);
+    setUser(null);
+    return {success: true}
+  } catch (error) {
+    return {success: false, error: "An unknown error occurred while logging out."};
+  }
+}
+
+export { Register, Login, fetchUserData, Logout };

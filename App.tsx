@@ -39,7 +39,7 @@ export default function App() {
   if (loading) return <SplashScreen />;
 
   return (
-    <AuthContext.Provider value={{ user, loading }}>
+    <AuthContext.Provider value={{ user, loading, setUser }}>
         <StatusBar style="light" />
       <NavigationContainer theme={customTheme}>
         {user ? <TabNavigator /> : <AuthNavigator />}
