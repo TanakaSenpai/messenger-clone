@@ -1,4 +1,3 @@
-import { AuthContext } from "app/auth/context";
 import { auth, db } from "app/configs/firebase";
 import { FirebaseError } from "firebase/app";
 import {
@@ -8,7 +7,6 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
-import { useContext } from "react";
 
 export interface User {
   uid: string;
@@ -70,12 +68,6 @@ const Register = async (data: User) => {
 
 const Login = async (email: string, password: string) => {
   try {
-    // const signInMethods = await fetchSignInMethodsForEmail(auth, email);
-    
-    // if (signInMethods.length === 0) {
-    //   // No sign-in methods for this email (email not found)
-    //   return { success: false, error: "Email not registered." };
-    // }
     await signInWithEmailAndPassword(auth, email, password);
     return { success: true, user: auth.currentUser };
   } catch (error) {
@@ -85,9 +77,11 @@ const Login = async (email: string, password: string) => {
       } else if (error.code === "auth/invalid-credential") {
         return { success: false, error: "Incorrect password." };
       }
-    } else {
-      return { success: false, error: "An unknown error occurred while logging in." };
     }
+    return {
+      success: false,
+      error: "An unknown error occurred while logging in.",
+    };
   }
 };
 
@@ -97,23 +91,24 @@ const fetchUserData = async (userId: string): Promise<User | null> => {
     if (userRef.exists()) {
       return userRef.data() as User;
     } else {
-      return null; // Return null if no user data is found
+      return null;
     }
   } catch (error) {
     console.error("Error fetching user data:", error);
-    return null; // In case of error, return null
+    return null;
   }
 };
 
 const Logout = async () => {
   try {
-    const {setUser} = useContext(AuthContext)
     await signOut(auth);
-    setUser(null);
-    return {success: true}
+    return { success: true };
   } catch (error) {
-    return {success: false, error: "An unknown error occurred while logging out."};
+    return {
+      success: false,
+      error: "An unknown error occurred while logging out.",
+    };
   }
-}
+};
 
 export { Register, Login, fetchUserData, Logout };

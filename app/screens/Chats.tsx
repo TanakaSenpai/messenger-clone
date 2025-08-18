@@ -1,98 +1,110 @@
-import React from "react";
+import React, { useEffect, useMemo, useState, useContext } from "react";
 import { StyleSheet, Text, FlatList } from "react-native";
 
 import MsgPreview from "app/components/MsgPreview";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "app/navigation/types";
+import { AuthContext } from "app/auth/context";
+import { db } from "app/configs/firebase";
+import {
+  collection,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+  getDoc,
+  doc,
+  Timestamp,
+} from "firebase/firestore";
 
 export interface Chat {
-  id: number;
+  id: string; // partner uid (other participant)
   name: string;
-  message: string;
-  time: string;
+  message: string; // last message text
+  time: string; // formatted last message time
   avatar: string;
-  isRead: boolean;
+  isRead: boolean; // placeholder for now
 }
-const chats = [
-  {
-    id: 1,
-    name: "Alice",
-    message: "Hey, how are you?",
-    time: "10:30 AM",
-    avatar: "https://picsum.photos/seed/alice/50", // Random image
-    isRead: true,
-  },
-  {
-    id: 2,
-    name: "Bob",
-    message: "Let's catch up later.",
-    time: "9:15 AM",
-    avatar: "https://picsum.photos/seed/bob/50",
-    isRead: false,
-  },
-  {
-    id: 3,
-    name: "Charlie",
-    message: "Got it, thanks!",
-    time: "Yesterday",
-    avatar: "https://picsum.photos/seed/charlie/50",
-    isRead: true,
-  },
-  {
-    id: 4,
-    name: "Diana",
-    message: "See you tomorrow.",
-    time: "Monday",
-    avatar: "https://picsum.photos/seed/diana/50",
-    isRead: false,
-  },
-  {
-    id: 5,
-    name: "Eve",
-    message:
-      "Can you send me the files? I need them right now, like immediately!",
-    time: "Sunday",
-    avatar: "https://picsum.photos/seed/eve/50",
-    isRead: true,
-  },
-];
+
+const formatTime = (ts?: Timestamp) => {
+  try {
+    const d = ts?.toDate?.() ?? new Date();
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+};
 
 const Chats = () => {
-  type ChatScreenNavProp = StackNavigationProp<RootStackParamList, "Conversation">
+  type ChatScreenNavProp = StackNavigationProp<
+    RootStackParamList,
+    "Conversation"
+  >;
   const navigation = useNavigation<ChatScreenNavProp>();
+  const { user } = useContext(AuthContext);
+  const [items, setItems] = useState<Chat[]>([]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const convosRef = collection(db, "conversations");
+    const q = query(
+      convosRef,
+      where("participants", "array-contains", user.uid),
+      orderBy("lastMessageAt", "desc")
+    );
+    const unsub = onSnapshot(q, async (snap) => {
+      const next: Chat[] = [];
+      for (const d of snap.docs) {
+        const convo = d.data() as {
+          participants: string[];
+          lastMessage?: string;
+          lastMessageAt?: Timestamp;
+        };
+        const otherId =
+          convo.participants.find((p) => p !== user.uid) || user.uid;
+        const otherDoc = await getDoc(doc(db, "userInfo", otherId));
+        const other = (otherDoc.data() as any) || {};
+        next.push({
+          id: otherId,
+          name: other.firstName
+            ? `${other.firstName} ${other.lastName}`
+            : other.username || "User",
+          avatar: other.avatar || "https://picsum.photos/seed/user/50",
+          message: convo.lastMessage || "",
+          time: formatTime(convo.lastMessageAt),
+          isRead: true,
+        });
+      }
+      setItems(next);
+    });
+    return unsub;
+  }, [user?.uid]);
+
   return (
-      <FlatList
-        data={chats}
-        keyExtractor={(chat) => chat.id.toString()}
-        renderItem={({ item }) => <MsgPreview chat={item} onPress={(item) => navigation.navigate("Conversation", {chat: item})} />}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 16 }}
-        ListEmptyComponent={
-          <Text style={styles.empty}>No chats available</Text>
-        }
-      />
+    <FlatList
+      data={items}
+      keyExtractor={(chat) => chat.id}
+      renderItem={({ item }) => (
+        <MsgPreview
+          chat={item}
+          onPress={(it) => navigation.navigate("Conversation", { chat: it })}
+        />
+      )}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: 16 }}
+      ListEmptyComponent={<Text style={styles.empty}>No chats available</Text>}
+    />
   );
 };
 
 const styles = StyleSheet.create({
   container: {},
-  header: {
-    fontSize: 24,
-    fontWeight: "bold",
-    padding: 16,
-    color: "#fff",
-  },
   empty: {
     textAlign: "center",
     marginTop: 20,
     fontSize: 16,
     color: "#aaa",
-  },
-  footer: {
-    textAlign: "center",
-    padding: 16,
-    color: "#ccc",
   },
 });
 
