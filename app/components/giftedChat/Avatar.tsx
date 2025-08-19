@@ -5,7 +5,7 @@ import colors from 'app/configs/colors';
 
 const RnAvatar = (props: any) => {
     const { currentMessage } = props;
-    if (!currentMessage?.user?.avatar) console.log("no image");
+
 
     return (
       <View style={styles.avatarContainer}>

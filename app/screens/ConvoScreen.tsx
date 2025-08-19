@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -29,6 +29,7 @@ import {
 } from "app/api/messages";
 import { useContext, useMemo } from "react";
 import { AuthContext } from "app/auth/context";
+import { serverTimestamp } from "firebase/firestore";
 
 interface Message {
   id: string;
@@ -57,10 +58,19 @@ const ConvoScreen = ({
   const flatListRef = useRef<FlatList<Message>>(null);
   const prevLengthRef = useRef<number>(0);
   const [autoScroll, setAutoScroll] = useState(true);
+  const inputTextRef = useRef<string>("");
 
   const headerHeight = useHeaderHeight();
   const { chat } = route.params;
   const { user: currentUser } = useContext(AuthContext);
+  const otherUserUid = String(chat.id);
+
+  // Keep ref in sync with input state
+  useEffect(() => {
+    inputTextRef.current = inputText;
+  }, [inputText]);
+
+
 
   const conversationId = useMemo(() => {
     const otherId = String(chat.id);
@@ -95,7 +105,26 @@ const ConvoScreen = ({
               (r.senderId === currentUser.uid ? undefined : chat.avatar),
           },
         }));
-        setMessages(mapped);
+
+        // Only update if messages actually changed to prevent unnecessary re-renders
+        setMessages((prev) => {
+          // Check if messages are actually different
+          if (prev.length !== mapped.length) return mapped;
+
+          // Check if any message content changed
+          for (let i = 0; i < prev.length; i++) {
+            if (
+              prev[i].id !== mapped[i].id ||
+              prev[i].text !== mapped[i].text ||
+              prev[i].timestamp.getTime() !== mapped[i].timestamp.getTime()
+            ) {
+              return mapped;
+            }
+          }
+
+          // No changes, return previous state to prevent re-render
+          return prev;
+        });
       });
     })();
     return () => {
@@ -122,23 +151,79 @@ const ConvoScreen = ({
     setAutoScroll(distanceFromBottom < 120);
   };
 
-  const sendMessage = async () => {
-    if (!inputText.trim() || !currentUser?.uid) return;
-    const text = inputText.trim();
-    setInputText("");
-    try {
-      await sendMessageToConversation(conversationId, text, {
-        uid: currentUser.uid,
-        name: currentUser.firstName
-          ? `${currentUser.firstName} ${currentUser.lastName}`
-          : currentUser.email,
-        avatar: currentUser.avatar,
-      });
-    } catch (e) {
-      // If sending fails, restore input so user can retry
-      setInputText(text);
-    }
+const sendMessage = useCallback(async () => {
+  if (!inputText.trim() || !currentUser?.uid || !otherUserUid) {
+    return;
+  }
+
+  const text = inputText.trim();
+  inputTextRef.current = text;
+
+  // Clear input for UX
+  setInputText("");
+
+  // Temporary message for optimistic UI
+  const tempMessage: Message = {
+    id: `temp-${Date.now()}`,
+    text,
+    timestamp: new Date(),
+    user: {
+      id: currentUser.uid,
+      name: currentUser.firstName
+        ? `${currentUser.firstName} ${currentUser.lastName}`
+        : currentUser.email,
+      avatar: currentUser.avatar,
+    },
   };
+
+  // Show temp message immediately
+  setMessages((prev) => [...prev, tempMessage]);
+
+  try {
+    // Send message to Firebase
+    await sendMessageToConversation(conversationId, text, {
+      uid: currentUser.uid,
+      name: currentUser.firstName
+        ? `${currentUser.firstName} ${currentUser.lastName}`
+        : currentUser.email,
+      avatar: currentUser.avatar,
+    }, [currentUser.uid, otherUserUid]); // participants included for first message
+
+    // Remove temp message after successful send
+    setMessages((prev) => prev.filter((msg) => msg.id !== tempMessage.id));
+  } catch (e) {
+    console.error("Failed to send message:", e);
+
+    if (
+      e &&
+      typeof e === "object" &&
+      "message" in e &&
+      typeof e.message === "string" &&
+      e.message.includes("permissions")
+    ) {
+      console.error(
+        "This is a Firestore permissions issue. Check your security rules."
+      );
+      console.error("The conversationId being used:", conversationId);
+      console.error("Current user UID:", currentUser?.uid);
+    }
+
+    // Restore input so user can retry
+    setInputText(inputTextRef.current);
+
+    // Remove temp message on error
+    setMessages((prev) => prev.filter((msg) => msg.id !== tempMessage.id));
+  }
+}, [
+  conversationId,
+  currentUser?.uid,
+  currentUser?.firstName,
+  currentUser?.lastName,
+  currentUser?.email,
+  currentUser?.avatar,
+  inputText,
+  otherUserUid,
+]);
 
   const formatTimestamp = (date: Date) => {
     const now = new Date();
@@ -392,7 +477,10 @@ const ConvoScreen = ({
             <TextInput
               style={styles.input}
               value={inputText}
-              onChangeText={setInputText}
+              onChangeText={(text) => {
+
+                setInputText(text);
+              }}
               placeholder="Aa"
               placeholderTextColor="#8A8A8A"
               multiline
@@ -405,7 +493,15 @@ const ConvoScreen = ({
           </View>
 
           <View style={styles.inputRight}>
-            <TouchableOpacity style={styles.inputIcon} onPress={sendMessage}>
+            <TouchableOpacity
+              style={styles.inputIcon}
+              onPress={() => {
+
+                sendMessage();
+              }}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <Ionicons name="send" size={24} color="#007AFF" />
             </TouchableOpacity>
           </View>
