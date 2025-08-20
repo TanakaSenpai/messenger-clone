@@ -20,6 +20,9 @@ export type ChatMessageRecord = {
   senderId: string;
   senderName?: string;
   senderAvatar?: string;
+  // Media fields for image/video messages
+  mediaUrl?: string;
+  mediaType?: "image" | "video";
 };
 
 export const buildConversationId = (userA: string, userB: string) => {
@@ -72,7 +75,7 @@ export const sendMessageToConversation = async (
     // Check if conversation exists
     let convoSnap;
     let conversationExists = false;
-    
+
     try {
       convoSnap = await getDoc(convoRef);
       conversationExists = convoSnap.exists();
@@ -96,7 +99,7 @@ export const sendMessageToConversation = async (
     }
 
     // Extract participants from conversationId for first message
-    const participants = conversationId.split('__');
+    const participants = conversationId.split("__");
 
     // Add the message (with participants for first message scenario)
     const messageData: any = {
@@ -132,6 +135,77 @@ export const sendMessageToConversation = async (
     }
   } catch (error) {
     console.error(`[sendMessageToConversation] Error:`, error);
+    throw error;
+  }
+};
+
+// Send media message (image or video)
+export const sendMediaMessageToConversation = async (
+  conversationId: string,
+  media: { url: string; type: "image" | "video"; caption?: string },
+  sender: { uid: string; name?: string; avatar?: string }
+) => {
+  try {
+    const convoRef = doc(db, "conversations", conversationId);
+    const msgsRef = collection(db, "conversations", conversationId, "messages");
+
+    let convoSnap;
+    let conversationExists = false;
+    try {
+      convoSnap = await getDoc(convoRef);
+      conversationExists = convoSnap.exists();
+    } catch (error) {
+      conversationExists = false;
+    }
+
+    if (conversationExists && convoSnap) {
+      const convoData = convoSnap.data();
+      if (
+        !convoData ||
+        !convoData.participants ||
+        !convoData.participants.includes(sender.uid)
+      ) {
+        throw new Error(
+          `User ${sender.uid} is not a participant in conversation ${conversationId}`
+        );
+      }
+    }
+
+    const participants = conversationId.split("__");
+    const text = media.caption ?? "";
+    const placeholder = media.type === "image" ? "[Photo]" : "[Video]";
+
+    const messageData: any = {
+      text,
+      createdAt: serverTimestamp(),
+      senderId: sender.uid,
+      senderName: sender.name,
+      senderAvatar: sender.avatar,
+      mediaUrl: media.url,
+      mediaType: media.type,
+    };
+
+    if (!conversationExists) {
+      messageData.participants = participants;
+    }
+
+    await addDoc(msgsRef, messageData);
+
+    if (!conversationExists) {
+      await setDoc(convoRef, {
+        participants,
+        createdAt: serverTimestamp(),
+        lastMessage: placeholder,
+        lastMessageAt: serverTimestamp(),
+      });
+    } else {
+      await updateDoc(convoRef, {
+        lastMessage: placeholder,
+        lastMessageAt: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    console.error(`[sendMediaMessageToConversation] Error:`, error);
     throw error;
   }
 };

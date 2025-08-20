@@ -9,20 +9,16 @@ import MenuItems from "app/components/MenuItems";
 import { Logout } from "app/api/auth";
 import { AuthContext } from "app/auth/context";
 import { useNavigation } from "@react-navigation/native";
-import { AuthStackParamList } from "app/navigation/types";
 import { StackNavigationProp } from "@react-navigation/stack";
+import type { MenuStackParamList } from "app/navigation/MenuNavigator";
 
-type LoginScreenNavigationProp = StackNavigationProp<
-  AuthStackParamList,
-  "Login"
->;
 const MenuScreen = () => {
-  const navigator = useNavigation<LoginScreenNavigationProp>();
+  const navigator = useNavigation<StackNavigationProp<MenuStackParamList>>();
   const iconSize = 25;
   const iconColor = colors.white;
   const { user } = useContext(AuthContext);
   if (!user) {
-    navigator.navigate("Login");
+    // If unauthenticated, rely on higher-level navigation guard; avoid navigating here
     return null;
   }
 
@@ -45,7 +41,7 @@ const MenuScreen = () => {
                 color={iconColor}
               />
             ),
-            onPress: () => {},
+            onPress: () => navigator.navigate("Settings"),
           },
         ]}
       />

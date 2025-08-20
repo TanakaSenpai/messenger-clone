@@ -1,4 +1,6 @@
 import { auth, db } from "app/configs/firebase";
+import { supabase } from "app/configs/supabase";
+import { ensureSupabaseSessionWithEmailPassword } from "app/auth/supabaseBridge";
 import { FirebaseError } from "firebase/app";
 import {
   createUserWithEmailAndPassword,
@@ -37,7 +39,7 @@ const Register = async (data: User) => {
         photoURL: "https://picsum.photos/300/300",
       });
     } catch (profileError) {
-      console.log("Profile update failed (non-critical):", profileError);
+      console.error("Profile update failed:", profileError);
     }
 
     await setDoc(doc(db, "userInfo", userCreds.user.uid), {
@@ -53,9 +55,17 @@ const Register = async (data: User) => {
       createdAt: serverTimestamp(),
     });
 
+    // Ensure Supabase session exists for private Storage access
+    try {
+      await ensureSupabaseSessionWithEmailPassword(data.email, data.password);
+      await supabase.auth.getSession();
+    } catch (e) {
+      console.error("Supabase sign-up/sign-in failed:", e);
+    }
+
     return { success: true, user: userCreds.user };
   } catch (error) {
-    console.log(error);
+    console.error(error);
     if (error instanceof FirebaseError) {
       return { success: false, error: error.message };
     }
@@ -69,6 +79,13 @@ const Register = async (data: User) => {
 const Login = async (email: string, password: string) => {
   try {
     await signInWithEmailAndPassword(auth, email, password);
+    // Also login to Supabase (create if needed)
+    try {
+      await ensureSupabaseSessionWithEmailPassword(email, password);
+      await supabase.auth.getSession();
+    } catch (e) {
+      console.error("Supabase sign-in failed:", e);
+    }
     return { success: true, user: auth.currentUser };
   } catch (error) {
     if (error instanceof FirebaseError) {
@@ -102,6 +119,11 @@ const fetchUserData = async (userId: string): Promise<User | null> => {
 const Logout = async () => {
   try {
     await signOut(auth);
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("Supabase signOut failed:", e);
+    }
     return { success: true };
   } catch (error) {
     return {

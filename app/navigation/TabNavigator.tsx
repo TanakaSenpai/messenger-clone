@@ -6,7 +6,7 @@ import colors from "app/configs/colors";
 import ChatNavigator from "./ChatNavigator";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { getFocusedRouteNameFromRoute } from "@react-navigation/native";
-import MenuScreen from "app/screens/MenuScreen";
+import MenuNavigator from "./MenuNavigator";
 
 const TabNavigator = () => {
   const Tab = createBottomTabNavigator();
@@ -35,16 +35,9 @@ const TabNavigator = () => {
       <Tab.Screen name="Stories" component={Stories} options={{ 
         tabBarIcon: ({ color }) => <MaterialIcons name="web-stories" size={22} color={color} />
        }} />
-       <Tab.Screen name="Menu" component={MenuScreen} options={{ 
+       <Tab.Screen name="Menu" component={MenuNavigator} options={{ 
         tabBarIcon: ({color}) => <Ionicons name="menu" size={25} color={color} />,
-        headerStyle: {
-          backgroundColor: colors.black,
-          
-        }, 
-        headerTitleStyle: {
-          fontSize: 24
-        },
-        headerTitleAlign: "left"
+        headerShown: false
         }} />
     </Tab.Navigator>
   );
