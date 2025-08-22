@@ -31,16 +31,32 @@ import {
   subscribeToMessages,
   ChatMessageRecord,
   sendMediaMessageToConversation,
+  markMessageSent,
+  markMessageSeen,
 } from "app/api/messages";
 import { uploadFileFromUriSupabase, BUCKET } from "app/api/storageSupabase";
 import { supabase } from "app/configs/supabase";
 import { Video, ResizeMode } from "expo-av";
 import { useContext, useMemo } from "react";
 import { AuthContext } from "app/auth/context";
-import { serverTimestamp } from "firebase/firestore";
+import { serverTimestamp, Timestamp } from "firebase/firestore";
 
 interface Message {
+  // Exact schema fields
   id: string;
+  conversationId?: string;
+  senderId?: string;
+  receiverId?: string;
+  type?: "text" | "image" | "video" | "file";
+  content?: string | null;
+  mediaUrl?: string | null;
+  status?: "sent" | "delivered" | "seen";
+  createdAtTS?: Timestamp;
+  sentAtTS?: Timestamp | null;
+  deliveredAtTS?: Timestamp | null;
+  seenAtTS?: Timestamp | null;
+
+  // UI derived fields for existing rendering code
   text: string;
   timestamp: Date;
   user: {
@@ -48,7 +64,6 @@ interface Message {
     name: string;
     avatar?: string;
   };
-  mediaUrl?: string;
   mediaType?: "image" | "video";
 }
 
@@ -138,23 +153,33 @@ const ConvoScreen = ({
         ]);
       } catch {}
       unsubscribe = subscribeToMessages(conversationId, (records) => {
+        // On receiver device: when online/subscribed, advance delivered -> sent
+        records.forEach((r) => {
+          if (r.senderId !== currentUser.uid && r.status === "delivered" && r.id) {
+            // Attach a catch handler to capture permission/rules errors
+            markMessageSent(conversationId, r.id).catch((e) => {
+              console.error("Failed to mark message as sent", { conversationId, messageId: r.id, error: e });
+            });
+          }
+        });
+
         const mapped: Message[] = records.map((r) => ({
-          id: r.id || Math.random().toString(),
-          text: r.text,
+          id: (r as any).id || Math.random().toString(),
+          text: ((r as any).content ?? "") as string,
           timestamp: (r.createdAt as any)?.toDate
             ? (r.createdAt as any).toDate()
             : new Date(),
+          status: (r as any).status as any,
+          sentAtTS: (r as any).sentAt as any,
+          deliveredAtTS: (r as any).deliveredAt as any,
+          seenAtTS: (r as any).seenAt as any,
           user: {
             id: r.senderId,
-            name:
-              r.senderName ||
-              (r.senderId === currentUser.uid ? "You" : chat.name),
-            avatar:
-              r.senderAvatar ||
-              (r.senderId === currentUser.uid ? undefined : chat.avatar),
+            name: r.senderId === currentUser.uid ? "You" : (chat.name as string),
+            avatar: r.senderId === currentUser.uid ? undefined : (chat.avatar as any),
           },
-          mediaUrl: (r as any).mediaUrl,
-          mediaType: (r as any).mediaType,
+          mediaUrl: (r as any).mediaUrl ?? null,
+          mediaType: (r as any).type === "image" || (r as any).type === "video" ? (r as any).type : undefined,
         }));
 
         // Generate signed URLs for private bucket paths (images and videos)
@@ -221,7 +246,11 @@ const ConvoScreen = ({
               a.id !== b.id ||
               a.text !== b.text ||
               a.mediaUrl !== b.mediaUrl ||
-              a.mediaType !== b.mediaType
+              a.mediaType !== b.mediaType ||
+              a.status !== (b as any).status ||
+              (a.seenAtTS as any)?.seconds !== (b as any)?.seenAtTS?.seconds ||
+              (a.deliveredAtTS as any)?.seconds !== (b as any)?.deliveredAtTS?.seconds ||
+              (a.sentAtTS as any)?.seconds !== (b as any)?.sentAtTS?.seconds
             ) {
               return withCached;
             }
@@ -232,6 +261,15 @@ const ConvoScreen = ({
     })();
     return () => unsubscribe && unsubscribe();
   }, [conversationId, currentUser?.uid, chat.id, chat.name, chat.avatar]);
+
+  // When viewing this conversation, mark latest other-user message as seen
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    const lastIncoming = [...messages].reverse().find((m) => m.user.id !== currentUser.uid);
+    if (lastIncoming && lastIncoming.id && lastIncoming.status !== "seen") {
+      try { markMessageSeen(conversationId, lastIncoming.id); } catch {}
+    }
+  }, [messages, currentUser?.uid, conversationId]);
 
   // Smooth scroll to end when new messages arrive or are sent
   useEffect(() => {
@@ -1022,6 +1060,19 @@ const ConvoScreen = ({
     ],
   } as const;
 
+  // Time formatting per spec: minutes for <1h; Xh for <24h; 'yesterday' for 24–47h; X days for 48h+
+  const formatRelativeTime = (from: Date): string => {
+    const now = new Date();
+    const ms = now.getTime() - from.getTime();
+    const minutes = Math.floor(ms / (1000 * 60));
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+    if (hours < 1) return `${Math.max(1, minutes)}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (hours < 48) return "yesterday";
+    return `${days} days ago`;
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -1033,7 +1084,37 @@ const ConvoScreen = ({
           <FlatList
             ref={flatListRef}
             data={messages}
-            renderItem={renderMessage}
+            renderItem={({ item, index }) => {
+              // Wrap bubble + status line under the last outgoing message
+              const isMine = item.user.id === currentUser?.uid;
+              const isLast = index === messages.length - 1;
+
+              let statusText: string | null = null;
+              if (isMine && isLast) {
+                if (item.id?.startsWith?.("temp-")) {
+                  statusText = "Sending…";
+                } else if (item.seenAtTS) {
+                  const t = (item.seenAtTS as any)?.toDate?.() as Date | undefined;
+                  const suffix = t ? formatRelativeTime(t) : "";
+                  statusText = suffix ? `Seen ${suffix}` : "Seen";
+                } else if (item.sentAtTS) {
+                  statusText = "Sent";
+                } else if (item.deliveredAtTS) {
+                  statusText = "Delivered";
+                }
+              }
+
+              return (
+                <View>
+                  {renderMessage({ item, index })}
+                  {statusText ? (
+                    <View style={styles.permanentSentFooterWrapper}>
+                      <Text style={styles.permanentSentFooterText}>{statusText}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            }}
             keyExtractor={(item) => item.id}
             style={styles.messagesList}
             showsVerticalScrollIndicator={false}
@@ -1328,6 +1409,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   sentFooterText: { color: "#fff", fontSize: 12 },
+  // Inline status under last outgoing message
+  permanentSentFooterWrapper: {
+    alignSelf: "flex-end",
+    paddingTop: 4,
+    paddingRight: 2,
+    marginRight: 2,
+  },
+  permanentSentFooterText: {
+    alignSelf: "flex-end",
+    marginTop: 2,
+    color: "#8E8E93",
+    fontSize: 12,
+    textAlign: "right",
+  },
 });
 
 export default ConvoScreen;

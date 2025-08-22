@@ -1,6 +1,5 @@
 import { auth, db } from "app/configs/firebase";
 import {
-  addDoc,
   collection,
   doc,
   onSnapshot,
@@ -13,16 +12,20 @@ import {
   updateDoc,
 } from "firebase/firestore";
 
+// Exact message schema per spec
 export type ChatMessageRecord = {
-  id?: string;
-  text: string;
-  createdAt: Timestamp;
-  senderId: string;
-  senderName?: string;
-  senderAvatar?: string;
-  // Media fields for image/video messages
-  mediaUrl?: string;
-  mediaType?: "image" | "video";
+  id: string; // unique message id
+  conversationId: string; // which chat this belongs to
+  senderId: string; // user who sent it
+  receiverId: string; // user who should get it
+  type: "text" | "image" | "video" | "file"; // message type
+  content: string | null; // actual text (null if media)
+  mediaUrl: string | null; // signed URL or storage path
+  status: "sent" | "delivered" | "seen";
+  createdAt: Timestamp; // when message was created (client)
+  sentAt: Timestamp | null; // when stored in server
+  deliveredAt: Timestamp | null; // when delivered to receiver
+  seenAt: Timestamp | null; // when receiver viewed it
 };
 
 export const buildConversationId = (userA: string, userB: string) => {
@@ -48,6 +51,30 @@ export const ensureConversationDoc = async (
   }
 };
 
+// Receiver marks a message as sent when it arrives on their device (online)
+export const markMessageSent = async (
+  conversationId: string,
+  messageId: string
+) => {
+  const msgRef = doc(db, "conversations", conversationId, "messages", messageId);
+  await updateDoc(msgRef, {
+    status: "sent",
+    sentAt: serverTimestamp(),
+  });
+};
+
+// Receiver marks a message as seen when viewing it in the conversation
+export const markMessageSeen = async (
+  conversationId: string,
+  messageId: string
+) => {
+  const msgRef = doc(db, "conversations", conversationId, "messages", messageId);
+  await updateDoc(msgRef, {
+    status: "seen",
+    seenAt: serverTimestamp(),
+  });
+};
+
 export const subscribeToMessages = (
   conversationId: string,
   onMessages: (messages: ChatMessageRecord[]) => void
@@ -66,7 +93,8 @@ export const subscribeToMessages = (
 export const sendMessageToConversation = async (
   conversationId: string,
   text: string,
-  sender: { uid: string; name?: string; avatar?: string }
+  sender: { uid: string; name?: string; avatar?: string },
+  createdAtClient?: Date
 ) => {
   try {
     const convoRef = doc(db, "conversations", conversationId);
@@ -101,33 +129,41 @@ export const sendMessageToConversation = async (
     // Extract participants from conversationId for first message
     const participants = conversationId.split("__");
 
-    // Add the message (with participants for first message scenario)
-    const messageData: any = {
-      text,
-      createdAt: serverTimestamp(),
+    // Compute receiverId from conversationId (2 participants)
+    const [a, b] = participants;
+    const receiverId = sender.uid === a ? b : a;
+
+    // Create with explicit ID so 'id' is stored on document
+    const newDocRef = doc(msgsRef);
+    const messageData: ChatMessageRecord = {
+      id: newDocRef.id,
+      conversationId,
       senderId: sender.uid,
-      senderName: sender.name,
-      senderAvatar: sender.avatar,
+      receiverId,
+      type: "text",
+      content: text,
+      mediaUrl: null,
+      status: "delivered",
+      createdAt: Timestamp.fromDate(createdAtClient ?? new Date()),
+      sentAt: null,
+      deliveredAt: serverTimestamp() as any,
+      seenAt: null,
     };
-
-    // For first messages, include participants array as required by Firebase rules
-    if (!conversationExists) {
-      messageData.participants = participants;
-    }
-
-    await addDoc(msgsRef, messageData);
 
     // Create or update conversation metadata
     if (!conversationExists) {
-      // First message: create conversation document
+      // First message: create conversation document BEFORE message per rules
       await setDoc(convoRef, {
         participants,
         createdAt: serverTimestamp(),
         lastMessage: text,
         lastMessageAt: serverTimestamp(),
       });
+      // Now write the first message
+      await setDoc(newDocRef, messageData as any);
     } else {
-      // Existing conversation: update metadata
+      // Existing conversation: write message then update metadata
+      await setDoc(newDocRef, messageData as any);
       await updateDoc(convoRef, {
         lastMessage: text,
         lastMessageAt: serverTimestamp(),
@@ -143,7 +179,8 @@ export const sendMessageToConversation = async (
 export const sendMediaMessageToConversation = async (
   conversationId: string,
   media: { url: string; type: "image" | "video"; caption?: string },
-  sender: { uid: string; name?: string; avatar?: string }
+  sender: { uid: string; name?: string; avatar?: string },
+  createdAtClient?: Date
 ) => {
   try {
     const convoRef = doc(db, "conversations", conversationId);
@@ -172,35 +209,38 @@ export const sendMediaMessageToConversation = async (
     }
 
     const participants = conversationId.split("__");
-    const text = media.caption ?? "";
-    const placeholder = media.type === "image" ? "[Photo]" : "[Video]";
+    const [a, b] = participants;
+    const receiverId = sender.uid === a ? b : a;
 
-    const messageData: any = {
-      text,
-      createdAt: serverTimestamp(),
+    const newDocRef = doc(msgsRef);
+    const messageData: ChatMessageRecord = {
+      id: newDocRef.id,
+      conversationId,
       senderId: sender.uid,
-      senderName: sender.name,
-      senderAvatar: sender.avatar,
+      receiverId,
+      type: media.type,
+      content: null,
       mediaUrl: media.url,
-      mediaType: media.type,
+      status: "delivered",
+      createdAt: Timestamp.fromDate(createdAtClient ?? new Date()),
+      sentAt: null,
+      deliveredAt: serverTimestamp() as any,
+      seenAt: null,
     };
 
     if (!conversationExists) {
-      messageData.participants = participants;
-    }
-
-    await addDoc(msgsRef, messageData);
-
-    if (!conversationExists) {
+      // Create convo first to satisfy rules, then write the message
       await setDoc(convoRef, {
         participants,
         createdAt: serverTimestamp(),
-        lastMessage: placeholder,
+        lastMessage: media.type === "image" ? "[Photo]" : "[Video]",
         lastMessageAt: serverTimestamp(),
       });
+      await setDoc(newDocRef, messageData as any);
     } else {
+      await setDoc(newDocRef, messageData as any);
       await updateDoc(convoRef, {
-        lastMessage: placeholder,
+        lastMessage: media.type === "image" ? "[Photo]" : "[Video]",
         lastMessageAt: serverTimestamp(),
       });
     }
