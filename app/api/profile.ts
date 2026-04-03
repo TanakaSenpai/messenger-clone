@@ -1,5 +1,5 @@
 import { auth, db } from "app/configs/firebase";
-import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { supabase } from "app/configs/supabase";
 import * as FileSystem from "expo-file-system";
 import { base64ToBytes } from "./storageSupabase";
@@ -7,11 +7,23 @@ import { updateProfile } from "firebase/auth";
 import type { User } from "app/api/auth";
 
 export const uploadProfileImage = async (uri: string, uid: string): Promise<string> => {
-  // Ensure we have a Supabase session (needed for RLS policies)
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
+  let { data: { user }, error: sessionError } = await supabase.auth.getUser();
+  if (sessionError) {
+    console.error("[profile] Supabase session error:", sessionError);
+  }
+  if (!user) {
+    const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError) {
+      console.error("[profile] Supabase refresh error:", refreshError);
+    }
+    user = session?.user ?? null;
+  }
+  if (!user) {
     throw new Error("No Supabase session. Please log out and log back in to upload a profile picture.");
   }
+
+  console.log("[profile] Supabase user:", user.id);
+  console.log("[profile] Firebase uid:", uid);
 
   let bytes: Uint8Array | null = null;
   try {
@@ -21,7 +33,7 @@ export const uploadProfileImage = async (uri: string, uid: string): Promise<stri
   } catch (_) {
     try {
       const b64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType?.Base64 || "base64" as any,
+        encoding: "base64" as any,
       });
       bytes = base64ToBytes(b64);
     } catch (e) {
@@ -32,8 +44,9 @@ export const uploadProfileImage = async (uri: string, uid: string): Promise<stri
   if (!bytes) throw new Error("Could not read image data");
 
   const fileName = `${uid}-${Date.now()}.jpg`;
-  // Store under uid/ folder so RLS can match auth.uid() to folder name
   const path = `${uid}/${fileName}`;
+
+  console.log("[profile] Uploading to path:", path);
 
   const { error: uploadError } = await supabase.storage
     .from("avatars")
@@ -44,6 +57,7 @@ export const uploadProfileImage = async (uri: string, uid: string): Promise<stri
 
   if (uploadError) {
     console.error("[profile] Supabase avatar upload error:", uploadError);
+    console.error("[profile] Upload error details:", JSON.stringify(uploadError));
     throw new Error(`Upload failed: ${uploadError.message}`);
   }
 
@@ -75,7 +89,7 @@ export const updateUserProfile = async (
   delete firestorePayload.uid;
   delete firestorePayload.createdAt;
 
-  await updateDoc(doc(db, "userInfo", uid), firestorePayload);
+  await setDoc(doc(db, "userInfo", uid), firestorePayload, { merge: true });
 
   try {
     await updateProfile(auth.currentUser, {
