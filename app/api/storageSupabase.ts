@@ -24,54 +24,53 @@ function mimeFromExt(ext: string, kind: MediaKind): string {
 export const BUCKET =
   process.env.EXPO_PUBLIC_SUPABASE_BUCKET || process.env.SUPABASE_BUCKET || "conversations";
 
+// Helper: decode base64 to bytes
+export function base64ToBytes(b64: string): Uint8Array {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+  let output: number[] = [];
+  let buffer = 0;
+  let bitsCollected = 0;
+  for (let i = 0; i < b64.length; i++) {
+    const ch = b64.charAt(i);
+    if (ch === "=") break;
+    const idx = chars.indexOf(ch);
+    if (idx === -1) continue;
+    buffer = (buffer << 6) | idx;
+    bitsCollected += 6;
+    if (bitsCollected >= 8) {
+      bitsCollected -= 8;
+      output.push((buffer >> bitsCollected) & 0xff);
+    }
+  }
+  return new Uint8Array(output);
+}
+
 export async function uploadFileFromUriSupabase(opts: {
   fileUri: string;
   kind: MediaKind;
   conversationId: string;
   uploaderUid: string;
-  participants?: string[]; // conversation participant UIDs
+  participants?: string[];
 }): Promise<{ publicUrl: string; path: string }> {
   const { fileUri, kind, conversationId, uploaderUid } = opts;
   const participantsCsv = (opts.participants || []).join(",");
 
-  // Helper: decode base64 to bytes
-  function base64ToBytes(b64: string): Uint8Array {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-    let output: number[] = [];
-    let buffer = 0;
-    let bitsCollected = 0;
-    for (let i = 0; i < b64.length; i++) {
-      const ch = b64.charAt(i);
-      if (ch === "=") break;
-      const idx = chars.indexOf(ch);
-      if (idx === -1) continue;
-      buffer = (buffer << 6) | idx;
-      bitsCollected += 6;
-      if (bitsCollected >= 8) {
-        bitsCollected -= 8;
-        output.push((buffer >> bitsCollected) & 0xff);
-      }
-    }
-    return new Uint8Array(output);
-  }
-
-  // Read file bytes safely in RN/Expo with fallback for file:// or content:// URIs
   let bytes: Uint8Array | null = null;
   try {
     const res = await fetch(fileUri);
     const ab = await res.arrayBuffer();
     bytes = new Uint8Array(ab);
   } catch (_) {
-    // Fallback to FileSystem for local URIs
     try {
       const b64 = await FileSystem.readAsStringAsync(fileUri, {
-        encoding: FileSystem.EncodingType.Base64,
+        encoding: FileSystem.EncodingType?.Base64 || ("base64" as any),
       });
       bytes = base64ToBytes(b64);
     } catch (e) {
       throw new Error(`Failed to read file bytes: ${String(e)}`);
     }
   }
+
   if (!bytes || bytes.byteLength === 0) {
     throw new Error("Failed to read bytes from file URI");
   }

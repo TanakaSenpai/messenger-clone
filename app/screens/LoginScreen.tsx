@@ -7,7 +7,7 @@ import { useNavigation } from "@react-navigation/native";
 import { AuthStackParamList } from "app/navigation/types";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { ScrollView } from "react-native";
-import { Login } from "app/api/auth";
+import { Login, fetchUserData } from "app/api/auth";
 import { AuthContext } from "app/auth/context";
 
 interface LoginData {
@@ -21,15 +21,37 @@ const MessengerLoginScreen = () => {
   const methods = useForm<LoginData>();
   const navigation = useNavigation<LoginScreenNavigationProp>();
 
-  const {user} = useContext(AuthContext);
+  const { setUser } = useContext(AuthContext);
 
   const onSubmit = async (data: LoginData) => {
     setLoading(true)
     const result = await Login(data.email, data.password);
     setLoading(false)
-    if (result!.success) {
-      console.log(result!.user)
-    } 
+    if (result!.success && result!.user) {
+      try {
+        const userData = await fetchUserData(result!.user.uid);
+        if (userData) {
+          setUser(userData);
+        } else {
+          // Fallback to minimal user so nav proceeds even if Firestore doc is missing
+          setUser({
+            uid: result!.user.uid,
+            email: result!.user.email ?? "",
+            firstName: result!.user.displayName?.split(" ")[0] ?? "",
+            lastName: result!.user.displayName?.split(" ").slice(1).join(" ") ?? "",
+            username: "",
+            avatar: result!.user.photoURL ?? "",
+            address: "",
+            gender: "",
+            phoneNumber: "",
+            password: "",
+            updatedAt: new Date(),
+          });
+        }
+      } catch (e) {
+        console.error("Failed to fetch user data after login:", e);
+      }
+    }
     if (result!.error) {
       Alert.alert("Error", result!.error)
     }

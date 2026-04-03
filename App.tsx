@@ -28,19 +28,38 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoading(true); // start loading when auth state changes
+      setLoading(true);
       if (firebaseUser) {
         try {
           const userData = await fetchUserData(firebaseUser.uid);
-          setUser(userData);
+          console.log("[App] onAuthStateChanged: userData from Firestore:", userData);
+          if (userData) {
+            setUser(userData);
+          } else {
+            // Firestore doc missing — synthesize a minimal user so nav proceeds
+            console.warn("[App] No Firestore profile found. Using Firebase auth data as fallback.");
+            setUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email ?? "",
+              firstName: firebaseUser.displayName?.split(" ")[0] ?? "",
+              lastName: firebaseUser.displayName?.split(" ").slice(1).join(" ") ?? "",
+              username: "",
+              avatar: firebaseUser.photoURL ?? "",
+              address: "",
+              gender: "",
+              phoneNumber: "",
+              password: "",
+              updatedAt: new Date(),
+            });
+          }
         } catch (err) {
-          console.error("Failed to fetch user data:", err);
+          console.error("[App] Failed to fetch user data:", err);
           setUser(null);
         }
       } else {
         setUser(null);
       }
-      setLoading(false); // stop loading
+      setLoading(false);
     });
   
     return unsubscribe;

@@ -1,16 +1,54 @@
 import { auth, db } from "app/configs/firebase";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { supabase } from "app/configs/supabase";
+import * as FileSystem from "expo-file-system";
+import { base64ToBytes } from "./storageSupabase";
 import { updateProfile } from "firebase/auth";
 import type { User } from "app/api/auth";
 
 export const uploadProfileImage = async (uri: string, uid: string): Promise<string> => {
-  const res = await fetch(uri);
-  const blob = await res.blob();
-  const storage = getStorage();
-  const fileRef = ref(storage, `avatars/${uid}.jpg`);
-  await uploadBytes(fileRef, blob);
-  return await getDownloadURL(fileRef);
+  // Ensure we have a Supabase session (needed for RLS policies)
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) {
+    throw new Error("No Supabase session. Please log out and log back in to upload a profile picture.");
+  }
+
+  let bytes: Uint8Array | null = null;
+  try {
+    const res = await fetch(uri);
+    const ab = await res.arrayBuffer();
+    bytes = new Uint8Array(ab);
+  } catch (_) {
+    try {
+      const b64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType?.Base64 || "base64" as any,
+      });
+      bytes = base64ToBytes(b64);
+    } catch (e) {
+      throw new Error(`Failed to read profile image: ${String(e)}`);
+    }
+  }
+
+  if (!bytes) throw new Error("Could not read image data");
+
+  const fileName = `${uid}-${Date.now()}.jpg`;
+  // Store under uid/ folder so RLS can match auth.uid() to folder name
+  const path = `${uid}/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("avatars")
+    .upload(path, bytes, {
+      contentType: "image/jpeg",
+      upsert: true,
+    });
+
+  if (uploadError) {
+    console.error("[profile] Supabase avatar upload error:", uploadError);
+    throw new Error(`Upload failed: ${uploadError.message}`);
+  }
+
+  const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+  return data.publicUrl;
 };
 
 export const updateUserProfile = async (

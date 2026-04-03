@@ -373,7 +373,7 @@ const ConvoScreen = ({
       if (perm.status !== "granted") return;
 
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         quality: 0.85,
         allowsMultipleSelection: false,
       });
@@ -461,7 +461,7 @@ const ConvoScreen = ({
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         quality: 0.85,
         allowsMultipleSelection: false,
       });
@@ -537,7 +537,7 @@ const ConvoScreen = ({
       if (perm.status !== "granted") return;
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        mediaTypes: ["images", "videos"],
         quality: 0.85,
         allowsMultipleSelection: false,
       });
@@ -627,8 +627,7 @@ const ConvoScreen = ({
       if (perm.status !== "granted") return;
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        // Use All to ensure videos appear in some OEM pickers
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        mediaTypes: ["images", "videos"],
         quality: 0.8,
         allowsMultipleSelection: false,
       });

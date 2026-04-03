@@ -2,7 +2,7 @@ import React from 'react';
 import { TouchableOpacity, View, Alert } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadFileFromUri } from 'app/api/storage';
+import { uploadFileFromUriSupabase } from 'app/api/storageSupabase';
 import { sendMediaMessageToConversation } from 'app/api/messages';
 import type { User } from 'app/api/auth';
 
@@ -23,7 +23,7 @@ export const ChatInputActions = ({ conversationId, currentUser, style }: ChatInp
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ["images", "videos"],
       quality: 0.8,
     });
 
@@ -33,7 +33,7 @@ export const ChatInputActions = ({ conversationId, currentUser, style }: ChatInp
     const mediaType = asset.type === 'video' ? 'video' : 'image';
 
     try {
-      const { downloadUrl } = await uploadFileFromUri({
+      const { publicUrl } = await uploadFileFromUriSupabase({
         fileUri: asset.uri,
         kind: mediaType,
         conversationId,
@@ -42,7 +42,7 @@ export const ChatInputActions = ({ conversationId, currentUser, style }: ChatInp
 
       await sendMediaMessageToConversation(
         conversationId,
-        { url: downloadUrl, type: mediaType },
+        { url: publicUrl, type: mediaType },
         {
           uid: currentUser.uid,
           name: currentUser.firstName ? `${currentUser.firstName} ${currentUser.lastName}` : currentUser.email,
