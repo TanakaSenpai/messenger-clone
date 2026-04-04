@@ -1,4 +1,9 @@
 import React, { useContext } from "react";
+import {
+  View,
+  Text,
+  Image,
+} from "react-native";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import Entypo from "react-native-vector-icons/Entypo";
 import IonIcons from "react-native-vector-icons/Ionicons";
@@ -18,9 +23,10 @@ const MenuScreen = () => {
   const iconColor = colors.white;
   const { user } = useContext(AuthContext);
   if (!user) {
-    // If unauthenticated, rely on higher-level navigation guard; avoid navigating here
     return null;
   }
+
+  const userAvatar = user.avatar || "https://picsum.photos/200";
 
   return (
     <>
@@ -29,7 +35,7 @@ const MenuScreen = () => {
           {
             title: `${user.firstName} ${user.lastName}`,
             subtitle: `@${user.username}`,
-            img: require("../assets/face.jpg"),
+            img: userAvatar.startsWith("http") ? { uri: userAvatar } : userAvatar,
             showChevron: false
           },
           {

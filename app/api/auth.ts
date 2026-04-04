@@ -8,7 +8,7 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
 
 export interface User {
   uid: string;
@@ -145,45 +145,44 @@ const DeleteAccount = async (password: string) => {
 
     const uid = user.uid;
 
-    // 2. Clean up Firestore
-    const { collection, query, where, getDocs, deleteDoc } = await import("firebase/firestore");
-    
-    // Find all conversations
-    const convosRef = collection(db, "conversations");
-    const q = query(convosRef, where("participants", "array-contains", uid));
-    const convosSnap = await getDocs(q);
+    // 2. Clean up Supabase Storage (messages media)
+    try {
+      const { BUCKET } = await import("app/api/storageSupabase");
+      
+      // Find all conversations
+      const convosRef = collection(db, "conversations");
+      const q = query(convosRef, where("participants", "array-contains", uid));
+      const convosSnap = await getDocs(q);
 
-    for (const convoDoc of convosSnap.docs) {
-      const convoId = convoDoc.id;
-      const msgsRef = collection(db, "conversations", convoId, "messages");
-      const msgsSnap = await getDocs(msgsRef);
+      for (const convoDoc of convosSnap.docs) {
+        const convoId = convoDoc.id;
+        const msgsRef = collection(db, "conversations", convoId, "messages");
+        const msgsSnap = await getDocs(msgsRef);
 
-      for (const msgDoc of msgsSnap.docs) {
-        const msgData = msgDoc.data();
-        
-        // 3. Clean up Supabase Storage if it's media
-        if (msgData.mediaUrl) {
-          try {
-            const { BUCKET } = await import("app/api/storageSupabase");
-            const baseUrl = msgData.mediaUrl.split("?")[0];
-            const parts = baseUrl.split(`/public/${BUCKET}/`);
-            if (parts.length > 1) {
-              const path = parts[1];
-              await supabase.storage.from(BUCKET).remove([path]);
+        for (const msgDoc of msgsSnap.docs) {
+          const msgData = msgDoc.data();
+          
+          if (msgData.mediaUrl) {
+            try {
+              const baseUrl = msgData.mediaUrl.split("?")[0];
+              const parts = baseUrl.split(`/public/${BUCKET}/`);
+              if (parts.length > 1) {
+                const path = parts[1];
+                await supabase.storage.from(BUCKET).remove([path]);
+              }
+            } catch (e) {
+              console.log("Failed to delete media from Supabase", e);
             }
-          } catch (e) {
-             console.log("Failed to delete media from Supabase", e);
           }
+          await deleteDoc(msgDoc.ref);
         }
-        await deleteDoc(msgDoc.ref);
+        await deleteDoc(convoDoc.ref);
       }
-      await deleteDoc(convoDoc.ref);
+    } catch (e) {
+      console.log("Failed to clean up messages/media", e);
     }
 
-    // Delete user profile in Firestore
-    await deleteDoc(doc(db, "userInfo", uid));
-
-    // Delete avatar from Supabase Storage if it exists
+    // 3. Delete avatar from Supabase Storage if it exists
     try {
       const { data: avatarFiles } = await supabase.storage.from("avatars").list(uid);
       if (avatarFiles && avatarFiles.length > 0) {
@@ -194,9 +193,11 @@ const DeleteAccount = async (password: string) => {
       console.log("Failed to delete avatar from Supabase", e);
     }
 
-    // 4. Delete Auth User (Supabase & Firebase)
+    // 4. Delete user profile in Firestore
+    await deleteDoc(doc(db, "userInfo", uid));
+
+    // 5. Delete Auth User (Supabase & Firebase)
     try {
-      // Best effort log out from Supabase (can't delete auth record from client)
       await supabase.auth.signOut();
     } catch {}
 

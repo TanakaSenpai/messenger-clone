@@ -734,7 +734,7 @@ const ConvoScreen = ({
       !!currentUser?.uid && item.user.id === currentUser.uid;
 
     return (
-      <View>
+      <View key={item.id}>
         {showTimeHeader && (
           <View style={styles.dateHeader}>
             <Text style={styles.dateHeaderText}>
@@ -1104,7 +1104,7 @@ const ConvoScreen = ({
               }
 
               return (
-                <View>
+                <View key={item.id}>
                   {renderMessage({ item, index })}
                   {statusText ? (
                     <View style={styles.permanentSentFooterWrapper}>

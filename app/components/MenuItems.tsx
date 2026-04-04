@@ -26,10 +26,19 @@ interface Props {
 }
 
 const MenuItems = ({ items }: Props) => {
+  const getImageSource = (img: any) => {
+    if (!img) return null;
+    if (typeof img === "string" && img.startsWith("http")) {
+      return { uri: img };
+    }
+    return img;
+  };
+
   return (
     <View style={styles.container}>
       {items.map((item, index) => {
         const showChevron = item.showChevron !== false;
+        const imageSource = getImageSource(item.img);
         return (
         <View key={index}>
           <TouchableHighlight
@@ -40,7 +49,7 @@ const MenuItems = ({ items }: Props) => {
           >
             <View style={styles.itemWrapper}>
               <View style={styles.imgLogoWrapper}>
-                {item.img && <Image source={item.img} style={styles.img} />}
+                {imageSource && <Image source={imageSource} style={styles.img} />}
                 {item.logo && item.logo}
               </View>
               <View style={styles.titleContainer}>
