@@ -39,15 +39,21 @@ export const ensureConversationDoc = async (
   const convoRef = doc(db, "conversations", conversationId);
   const snap = await getDoc(convoRef);
   if (!snap.exists()) {
+    // Create with participants as array for Firestore rule matching
     await setDoc(convoRef, {
       participants,
       createdAt: serverTimestamp(),
       lastMessage: "",
       lastMessageAt: serverTimestamp(),
     });
-
-    // Wait a moment to ensure the document is committed
-    await new Promise((resolve) => setTimeout(resolve, 100));
+  } else {
+    // Ensure participants are up to date
+    const existing = snap.data();
+    const existingParticipants = existing.participants || [];
+    const allParticipants = [...new Set([...existingParticipants, ...participants])];
+    if (allParticipants.length !== existingParticipants.length) {
+      await updateDoc(convoRef, { participants: allParticipants });
+    }
   }
 };
 
