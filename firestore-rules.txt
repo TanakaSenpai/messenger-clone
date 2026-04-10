@@ -16,5 +16,33 @@ service cloud.firestore {
         allow read, create, update, delete: if request.auth != null;
       }
     }
+
+    // POSTS
+    match /posts/{postId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+
+    // LIKES
+    match /likes/{likeId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.userId || request.auth.uid == likeId.split('_')[1]);
+    }
+
+    // COMMENTS
+    match /comments/{commentId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+
+    // FOLLOWS
+    match /follows/{followId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.followerId || request.auth.uid == followId.split('_')[0]);
+    }
   }
 }

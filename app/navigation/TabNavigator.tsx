@@ -1,44 +1,80 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-
-import Stories from "../screens/Stories";
-import colors from "app/configs/colors";
-import ChatNavigator from "./ChatNavigator";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { getFocusedRouteNameFromRoute } from "@react-navigation/native";
-import MenuNavigator from "./MenuNavigator";
+
+import FeedScreen from "../screens/FeedScreen";
+import ExploreScreen from "../screens/ExploreScreen";
+import CreatePostScreen from "../screens/CreatePostScreen";
+import ProfileScreen from "../screens/ProfileScreen";
+import ChatNavigator from "./ChatNavigator";
+import colors from "app/configs/colors";
 
 const TabNavigator = () => {
   const Tab = createBottomTabNavigator();
+  
   return (
-    <Tab.Navigator screenOptions={{
-      tabBarStyle: {
-        backgroundColor: colors.black,
-        borderTopWidth: 0
-     }}}
+    <Tab.Navigator 
+      screenOptions={{
+        tabBarStyle: {
+          backgroundColor: colors.black,
+          borderTopWidth: 0.5,
+          borderTopColor: colors.darkGray,
+          height: 60,
+          paddingBottom: 8,
+        },
+        tabBarActiveTintColor: colors.white,
+        tabBarInactiveTintColor: colors.mediumGray,
+        tabBarShowLabel: false,
+        headerShown: false,
+      }}
     >
       <Tab.Screen
-        options={({route}) => {
-          const routeName = getFocusedRouteNameFromRoute(route)
-          return { 
-            tabBarStyle: {
-              display: routeName === "Conversation" ? "none" : "flex",
-              backgroundColor: colors.black,
-              borderTopWidth: 0
-            },
-          headerShown: false,
-          tabBarIcon: ({color}) => <Ionicons name="chatbubble" size={22} color={color} />
-         }}}
+        name="Feed"
+        component={FeedScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Ionicons name="home" size={24} color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="Explore"
+        component={ExploreScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Ionicons name="search" size={24} color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="CreatePost"
+        component={CreatePostScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Ionicons name="add-circle-outline" size={28} color={color} />,
+        }}
+      />
+      <Tab.Screen
         name="ChatsTab"
         component={ChatNavigator}
+        options={({ route }) => {
+          const routeName = getFocusedRouteNameFromRoute(route);
+          return {
+            tabBarStyle: {
+              display: (routeName === "Conversation" || routeName === "ConvoInfo" || routeName === "MediaGallery" || routeName === "SearchConvo") ? "none" : "flex",
+              backgroundColor: colors.black,
+              borderTopWidth: 0.5,
+              borderTopColor: colors.darkGray,
+              height: 60,
+              paddingBottom: 8,
+            },
+            tabBarIcon: ({ color }) => <Ionicons name="chatbubble-ellipses" size={24} color={color} />,
+          };
+        }}
       />
-      <Tab.Screen name="Stories" component={Stories} options={{ 
-        tabBarIcon: ({ color }) => <MaterialIcons name="web-stories" size={22} color={color} />
-       }} />
-       <Tab.Screen name="Menu" component={MenuNavigator} options={{ 
-        tabBarIcon: ({color}) => <Ionicons name="menu" size={25} color={color} />,
-        headerShown: false
-        }} />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Ionicons name="person" size={24} color={color} />,
+        }}
+      />
     </Tab.Navigator>
   );
 };

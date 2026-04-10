@@ -9,7 +9,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
-  SafeAreaView,
   Animated,
   Easing,
   LayoutChangeEvent,
@@ -18,6 +17,8 @@ import {
   Modal,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
 import { PanResponder } from "react-native";
 import { RouteProp } from "@react-navigation/native";
 import { RootStackParamList } from "app/navigation/types";

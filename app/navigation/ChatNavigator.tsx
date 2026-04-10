@@ -4,9 +4,13 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 
 import Chats from "app/screens/Chats";
 import ConvoScreen from "app/screens/ConvoScreen";
+import ConvoInfoScreen from "app/screens/ConvoInfoScreen";
+import MediaGalleryScreen from "app/screens/MediaGalleryScreen";
+import SearchConvoScreen from "app/screens/SearchConvoScreen";
 import colors from "app/configs/colors";
 import { RootStackParamList } from "./types";
 import { Image, TouchableOpacity, View, Text } from "react-native";
+import { useNavigation, NavigationProp } from "@react-navigation/native";
 
 const Stack = createStackNavigator<RootStackParamList>();
 const ChatNavigator = () => {
@@ -52,7 +56,7 @@ const ChatNavigator = () => {
       <Stack.Screen
         name="Conversation"
         component={ConvoScreen}
-        options={({ route }) => ({
+        options={({ route, navigation }) => ({
           headerBackButtonDisplayMode: "minimal",
           headerTitleAlign: "left",
           headerTintColor: colors.blue,
@@ -89,17 +93,49 @@ const ChatNavigator = () => {
             <View style={{ flexDirection: "row", marginRight: 5 }}>
               <IonIcon name="call" />
               <IonIcon name="videocam" />
-              <IonIcon name="information-circle" />
+              <IonIcon
+                name="information-circle"
+                onPress={() => {
+                  navigation.navigate("ConvoInfo", { chat: route.params.chat });
+                }}
+              />
             </View>
           ),
         })}
+      />
+      <Stack.Screen
+        name="ConvoInfo"
+        component={ConvoInfoScreen}
+        options={{
+          title: "",
+          headerBackTitle: "",
+          headerTintColor: colors.blue,
+        }}
+      />
+      <Stack.Screen
+        name="MediaGallery"
+        component={MediaGalleryScreen}
+        options={{
+          title: "Media, Files & Links",
+          headerBackTitle: "",
+          headerTintColor: colors.blue,
+        }}
+      />
+      <Stack.Screen
+        name="SearchConvo"
+        component={SearchConvoScreen}
+        options={{
+          title: "Search conversation",
+          headerBackTitle: "",
+          headerTintColor: colors.blue,
+        }}
       />
     </Stack.Navigator>
   );
 };
 
-const IonIcon = ({ name }: { name: string }) => (
-  <TouchableOpacity>
+const IonIcon = ({ name, onPress }: { name: string; onPress?: () => void }) => (
+  <TouchableOpacity onPress={onPress}>
     <Ionicons
       name={name}
       size={23}
