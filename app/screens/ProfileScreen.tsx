@@ -16,7 +16,7 @@ import { db } from "app/configs/firebase";
 import { subscribeToUserPosts, Post } from "app/api/posts";
 import colors from "app/configs/colors";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import { RouteProp } from "@react-navigation/native";
+import { RouteProp, useNavigation } from "@react-navigation/native";
 import { RootStackParamList } from "app/navigation/types";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -29,6 +29,7 @@ interface Props {
 }
 
 const ProfileScreen = ({ route }: any) => {
+  const navigation = useNavigation<any>();
   const { user: currentUser } = useContext(AuthContext);
   const targetUserId = route.params?.userId || currentUser?.uid;
   const isOwnProfile = targetUserId === currentUser?.uid;
@@ -56,10 +57,15 @@ const ProfileScreen = ({ route }: any) => {
 
   const renderPostItem = ({ item }: { item: Post }) => (
     <TouchableOpacity style={styles.postThumbnail}>
-      <Image source={{ uri: item.mediaUrl }} style={styles.thumbnailImage} />
+      <Image source={{ uri: item.mediaUrl || (item.mediaItems?.[0]?.url || "") }} style={styles.thumbnailImage} />
       {item.mediaType === "video" && (
         <View style={styles.videoIndicator}>
           <Ionicons name="play" size={12} color="#fff" />
+        </View>
+      )}
+      {item.mediaItems && item.mediaItems.length > 1 && (
+        <View style={styles.multiIndicator}>
+          <Ionicons name="copy-outline" size={13} color="#fff" />
         </View>
       )}
     </TouchableOpacity>
@@ -81,14 +87,19 @@ const ProfileScreen = ({ route }: any) => {
 
       <View style={styles.bioContainer}>
         <Text style={styles.displayName}>
-          {isOwnProfile ? `${currentUser?.firstName} ${currentUser?.lastName}` : userInfo?.name || "User"}
+          {isOwnProfile 
+            ? (currentUser?.firstName ? `${currentUser.firstName} ${currentUser.lastName}` : "Me") 
+            : (userInfo?.name || userInfo?.username || "User")}
         </Text>
         <Text style={styles.bio}>Digital Creator • Photography Lover</Text>
       </View>
 
       <View style={styles.actionButtons}>
         {isOwnProfile ? (
-          <TouchableOpacity style={styles.editButton}>
+          <TouchableOpacity 
+            style={styles.editButton}
+            onPress={() => navigation.navigate("Menu", { screen: "Settings" })}
+          >
             <Text style={styles.editButtonText}>Edit Profile</Text>
           </TouchableOpacity>
         ) : (
@@ -119,6 +130,16 @@ const ProfileScreen = ({ route }: any) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.topNav}>
+        <Text style={styles.headerUsername}>
+          {isOwnProfile ? currentUser?.username : userInfo?.username || "Username"}
+        </Text>
+        {isOwnProfile && (
+          <TouchableOpacity onPress={() => navigation.navigate("Menu")}>
+            <Ionicons name="menu" size={28} color={colors.white} />
+          </TouchableOpacity>
+        )}
+      </View>
       <FlatList
         data={posts}
         ListHeaderComponent={Header}
@@ -244,6 +265,20 @@ const styles = StyleSheet.create({
     height: COLUMN_WIDTH,
     padding: 0.5,
   },
+  topNav: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.darkGray,
+  },
+  headerUsername: {
+    color: colors.white,
+    fontSize: 18,
+    fontWeight: "bold",
+  },
   thumbnailImage: {
     width: "100%",
     height: "100%",
@@ -252,6 +287,14 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 5,
     right: 5,
+  },
+  multiIndicator: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 8,
+    padding: 3,
   },
 });
 

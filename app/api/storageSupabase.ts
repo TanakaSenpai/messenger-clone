@@ -63,7 +63,7 @@ export async function uploadFileFromUriSupabase(opts: {
   } catch (_) {
     try {
       const b64 = await FileSystem.readAsStringAsync(fileUri, {
-        encoding: FileSystem.EncodingType?.Base64 || ("base64" as any),
+        encoding: "base64" as any,
       });
       bytes = base64ToBytes(b64);
     } catch (e) {

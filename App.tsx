@@ -7,6 +7,8 @@ import { fetchUserData, User } from "app/api/auth";
 import SplashScreen from "app/screens/SplashScreen";
 import TabNavigator from "./app/navigation/TabNavigator";
 import AuthNavigator from "app/navigation/AuthNavigator";
+import MenuNavigator from "app/navigation/MenuNavigator";
+import { createStackNavigator } from "@react-navigation/stack";
 import colors from "app/configs/colors";
 import { AuthContext } from "app/auth/context";
 import { collection, collectionGroup, getDocs, onSnapshot, query, where } from "firebase/firestore";
@@ -20,6 +22,8 @@ const customTheme = {
     text: "white",
   },
 };
+
+const Stack = createStackNavigator();
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -116,7 +120,14 @@ export default function App() {
     <AuthContext.Provider value={{ user, loading, setUser }}>
         <StatusBar style="light" />
       <NavigationContainer theme={customTheme}>
-        {user ? <TabNavigator /> : <AuthNavigator />}
+        {user ? (
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="Tabs" component={TabNavigator} />
+            <Stack.Screen name="Menu" component={MenuNavigator} />
+          </Stack.Navigator>
+        ) : (
+          <AuthNavigator />
+        )}
       </NavigationContainer>
     </AuthContext.Provider>
   );

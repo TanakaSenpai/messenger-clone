@@ -120,10 +120,10 @@ const Chats = () => {
 
         snapshot.forEach((doc) => {
           const userData = doc.data();
-
+          const docId = doc.id;
 
           // Double-check: ensure we never include the current user
-          if (userData.uid === user.uid) {
+          if (docId === user.uid) {
             console.log(
               `[Search] Skipping current user: ${userData.username || userData.firstName}`
             );
@@ -152,7 +152,7 @@ const Chats = () => {
               `[Search] Match found: ${userData.firstName} ${userData.lastName} (@${userData.username})`
             );
             suggestions.push({
-              uid: userData.uid,
+              uid: docId,
               firstName: userData.firstName || "",
               lastName: userData.lastName || "",
               username: userData.username || "",
@@ -252,7 +252,7 @@ const Chats = () => {
 
       const suggestions: UserSuggestion[] = [];
 
-
+      console.log(`[Initial] Fetched ${snapshot.docs.length} users from userInfo`);
 
       if (snapshot.docs.length === 0) {
 
@@ -262,16 +262,16 @@ const Chats = () => {
 
       snapshot.forEach((doc) => {
         const userData = doc.data();
-
+        const docId = doc.id;
 
         // Double-check: ensure we never include the current user
-        if (userData.uid === user.uid) {
+        if (docId === user.uid) {
 
           return; // Skip current user
         }
 
         suggestions.push({
-          uid: userData.uid,
+          uid: docId,
           firstName: userData.firstName || "",
           lastName: userData.lastName || "",
           username: userData.username || "",
@@ -392,33 +392,86 @@ const Chats = () => {
     const convosRef = collection(db, "conversations");
     const q = query(
       convosRef,
-      where("participants", "array-contains", user.uid),
-      orderBy("lastMessageAt", "desc")
+      where("participants", "array-contains", user.uid)
     );
     const unsub = onSnapshot(q, async (snap) => {
-      const next: Chat[] = [];
-      for (const d of snap.docs) {
-        const convo = d.data() as {
-          participants: string[];
-          lastMessage?: string;
-          lastMessageAt?: Timestamp;
-        };
-        const otherId =
-          convo.participants.find((p) => p !== user.uid) || user.uid;
-        const otherDoc = await getDoc(doc(db, "userInfo", otherId));
-        const other = (otherDoc.data() as any) || {};
-        next.push({
-          id: otherId,
-          name: other.firstName
-            ? `${other.firstName} ${other.lastName}`
-            : other.username || "User",
-          avatar: other.avatar || "https://picsum.photos/seed/user/50",
-          message: convo.lastMessage || "",
-          time: formatTime(convo.lastMessageAt),
-          isRead: true,
+      console.log(`[Chats] Fetched ${snap.docs.length} conversations for user ${user.uid} (unfiltered)`);
+      const currentUid = user?.uid;
+      if (!currentUid) return;
+
+      // Filter and fetch required user docs
+      const chatPromises = snap.docs
+        .map(async (d) => {
+          const convo = d.data() as {
+            participants: string[];
+            lastMessage?: string;
+            lastMessageAt?: Timestamp;
+          };
+          
+          // Ensure participants exists and remove any null/undefined entries
+          const participants = (convo.participants || []).filter((p) => p && p !== "undefined" && p !== "null");
+          
+          // Find the other participant
+          let otherId = participants.find((p) => p !== currentUid);
+          
+          // If it's a chat with oneself or participants is empty/corrupted
+          if (!otherId) {
+            otherId = currentUid;
+          }
+          
+          try {
+            const otherDoc = await getDoc(doc(db, "userInfo", otherId));
+            const other = otherDoc.data() as any;
+            
+            if (!otherDoc.exists() || !other) {
+              console.warn(`[Chats] No userInfo found for participant ID: ${otherId}`);
+              return {
+                id: otherId,
+                name: `User (${otherId.substring(0, 4)})`,
+                avatar: `https://picsum.photos/seed/${otherId}/50`,
+                message: convo.lastMessage || "",
+                time: formatTime(convo.lastMessageAt),
+                isRead: true,
+              };
+            }
+            
+            return {
+              id: otherId,
+              name: other.firstName
+                ? `${other.firstName} ${other.lastName}`
+                : other.username || `User (${otherId.substring(0, 4)})`,
+              avatar: other.avatar || `https://picsum.photos/seed/${otherId}/50`,
+              message: convo.lastMessage || "",
+              time: formatTime(convo.lastMessageAt),
+              isRead: true,
+            };
+          } catch (err) {
+            console.error(`[Chats] Error fetching info for user ${otherId}:`, err);
+            return {
+              id: otherId,
+              name: "Error loading user",
+              avatar: `https://picsum.photos/seed/${otherId}/50`,
+              message: convo.lastMessage || "",
+              time: formatTime(convo.lastMessageAt),
+              isRead: true,
+            };
+          }
         });
-      }
-      setItems(next);
+
+      const results = await Promise.all(chatPromises);
+      // Hide corrupted chats (where we couldn't find a valid second participant)
+      let validChats = results.filter((c) => c.id !== currentUid);
+      
+      // Sort in memory by time (since we removed orderBy from query)
+      validChats.sort((a, b) => {
+        const timeA = new Date(`1970/01/01 ${a.time}`).getTime();
+        const timeB = new Date(`1970/01/01 ${b.time}`).getTime();
+        return timeB - timeA;
+      });
+      
+      setItems(validChats);
+    }, (error) => {
+      console.error("[Chats] Error fetching conversations:", error);
     });
     return unsub;
   }, [user?.uid]);

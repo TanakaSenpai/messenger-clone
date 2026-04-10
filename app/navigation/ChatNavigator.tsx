@@ -25,19 +25,24 @@ const ChatNavigator = () => {
         name="Chats"
         component={Chats}
         options={{
-          headerLeft: () => (
-            <MaterialCommunityIcons
-              name="menu"
-              color={colors.white}
-              size={23}
-              style={{
-                padding: 7,
-                backgroundColor: colors.darkGray,
-                borderRadius: 20,
-                marginHorizontal: 15,
-              }}
-            />
-          ),
+          headerLeft: () => {
+            const nav = useNavigation<any>();
+            return (
+              <TouchableOpacity onPress={() => nav.navigate("Menu")}>
+                <MaterialCommunityIcons
+                  name="menu"
+                  color={colors.white}
+                  size={23}
+                  style={{
+                    padding: 7,
+                    backgroundColor: colors.darkGray,
+                    borderRadius: 20,
+                    marginHorizontal: 15,
+                  }}
+                />
+              </TouchableOpacity>
+            );
+          },
           headerRight: () => (
             <MaterialCommunityIcons
               name="pencil"

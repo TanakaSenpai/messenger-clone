@@ -72,6 +72,8 @@ const FeedScreen = ({ navigation }: any) => {
 const PostItem = ({ post, navigation }: { post: Post; navigation: any }) => {
   const [likes, setLikes] = useState(post.likesCount);
   const [isLiked, setIsLiked] = useState(false);
+  const [mediaIndex, setMediaIndex] = useState(0);
+  const isMulti = post.mediaItems && post.mediaItems.length > 1;
 
   useEffect(() => {
     const unsubscribe = subscribeToLikes(post.id, (count, liked) => {
@@ -97,11 +99,47 @@ const PostItem = ({ post, navigation }: { post: Post; navigation: any }) => {
       </View>
 
       <View style={styles.mediaContainer}>
-        {post.mediaType === "image" ? (
-          <Image source={{ uri: post.mediaUrl }} style={styles.postMedia} resizeMode="cover" />
+        {post.mediaItems && post.mediaItems.length > 0 ? (
+          <>
+            <FlatList
+              data={post.mediaItems}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(_, index) => `${post.id}-${index}`}
+              onScroll={(e) => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+                setMediaIndex(idx);
+              }}
+              scrollEventThrottle={16}
+              renderItem={({ item }) => (
+                <View style={{ width: SCREEN_WIDTH, height: SCREEN_WIDTH }}>
+                  {item.type === "image" ? (
+                    <Image source={{ uri: item.url }} style={styles.postMedia} resizeMode="cover" />
+                  ) : (
+                    <Video
+                      source={{ uri: item.url }}
+                      style={styles.postMedia}
+                      useNativeControls
+                      resizeMode={ResizeMode.COVER}
+                      isLooping
+                    />
+                  )}
+                </View>
+              )}
+            />
+            {/* Carousel icon top-right */}
+            {isMulti && (
+              <View style={styles.carouselIndicator}>
+                <Ionicons name="copy-outline" size={18} color={colors.white} />
+              </View>
+            )}
+          </>
+        ) : post.mediaType === "image" ? (
+          <Image source={{ uri: post.mediaUrl || "" }} style={styles.postMedia} resizeMode="cover" />
         ) : (
           <Video
-            source={{ uri: post.mediaUrl }}
+            source={{ uri: post.mediaUrl || "" }}
             style={styles.postMedia}
             useNativeControls
             resizeMode={ResizeMode.COVER}
@@ -109,6 +147,18 @@ const PostItem = ({ post, navigation }: { post: Post; navigation: any }) => {
           />
         )}
       </View>
+
+      {/* Dot pagination */}
+      {isMulti && (
+        <View style={styles.dotRow}>
+          {post.mediaItems!.map((_, i) => (
+            <View
+              key={i}
+              style={[styles.dot, i === mediaIndex && styles.dotActive]}
+            />
+          ))}
+        </View>
+      )}
 
       <View style={styles.postActions}>
         <View style={styles.leftActions}>
@@ -249,6 +299,33 @@ const styles = StyleSheet.create({
     color: colors.mediumGray,
     textAlign: "center",
     marginTop: 50,
+  },
+  carouselIndicator: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 12,
+    padding: 4,
+  },
+  dotRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 6,
+    gap: 5,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.35)",
+  },
+  dotActive: {
+    backgroundColor: colors.blue,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
 });
 

@@ -80,7 +80,7 @@ export const createStory = async (
   // Create story document
   const storyRef = await addDoc(collection(db, "stories"), {
     userId: uid,
-    userName: userData?.firstName ? `${userData.firstName} ${userData.lastName}` : user.email,
+    userName: (userData?.firstName ? `${userData.firstName} ${userData.lastName}` : user.email) || "Unknown",
     userAvatar: userData?.avatar || "",
     mediaUrl,
     mediaType,
@@ -91,7 +91,7 @@ export const createStory = async (
   return {
     id: storyRef.id,
     userId: uid,
-    userName: userData?.firstName ? `${userData.firstName} ${userData.lastName}` : user.email,
+    userName: (userData?.firstName ? `${userData.firstName} ${userData.lastName}` : user.email) || "Unknown",
     userAvatar: userData?.avatar || "",
     mediaUrl,
     mediaType,

@@ -29,6 +29,9 @@ export type ChatMessageRecord = {
 };
 
 export const buildConversationId = (userA: string, userB: string) => {
+  if (!userA || userA === "undefined" || userA === "null" || !userB || userB === "undefined" || userB === "null") {
+    throw new Error(`Invalid participant IDs for conversation: ${userA}, ${userB}`);
+  }
   return [userA, userB].sort().join("__");
 };
 
@@ -137,6 +140,9 @@ export const sendMessageToConversation = async (
 
     // Compute receiverId from conversationId (2 participants)
     const [a, b] = participants;
+    if (!a || a === "undefined" || a === "null" || !b || b === "undefined" || b === "null") {
+      throw new Error(`Corrupted conversationId detected: ${conversationId}`);
+    }
     const receiverId = sender.uid === a ? b : a;
 
     // Create with explicit ID so 'id' is stored on document
@@ -216,6 +222,9 @@ export const sendMediaMessageToConversation = async (
 
     const participants = conversationId.split("__");
     const [a, b] = participants;
+    if (!a || a === "undefined" || a === "null" || !b || b === "undefined" || b === "null") {
+      throw new Error(`Corrupted conversationId detected in media send: ${conversationId}`);
+    }
     const receiverId = sender.uid === a ? b : a;
 
     const newDocRef = doc(msgsRef);

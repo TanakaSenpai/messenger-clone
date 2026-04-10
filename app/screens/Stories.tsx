@@ -109,11 +109,15 @@ const Stories = () => {
         const result = await ImagePicker.launchCameraAsync({
           mediaTypes: ["images", "videos"],
           quality: 0.8,
-          allowsEditing: true,
+          allowsMultipleSelection: true,
         });
 
-        if (!result.canceled && result.assets[0]) {
-          await uploadStory(result.assets[0]);
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          const assets = result.assets.map(a => ({
+            uri: a.uri,
+            type: (a.type as "image" | "video") || "image"
+          }));
+          await uploadStories(assets);
         }
       } else {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -125,11 +129,15 @@ const Stories = () => {
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ["images", "videos"],
           quality: 0.8,
-          allowsEditing: true,
+          allowsMultipleSelection: true,
         });
 
-        if (!result.canceled && result.assets[0]) {
-          await uploadStory(result.assets[0]);
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          const assets = result.assets.map(a => ({
+            uri: a.uri,
+            type: (a.type as "image" | "video") || "image"
+          }));
+          await uploadStories(assets);
         }
       }
     } catch (error) {
@@ -138,17 +146,18 @@ const Stories = () => {
     }
   };
 
-  const uploadStory = async (asset: { uri: string; type?: string }) => {
+  const uploadStories = async (assets: { uri: string; type: string }[]) => {
     setIsUploading(true);
     try {
-      const mediaType = asset.type?.includes("video")
-        ? "video"
-        : "image";
-      await createStory(asset.uri, mediaType);
-      Alert.alert("Success", "Story added!");
+      // Process uploads sequentially or via Promise.all. A loop lets Firebase generate ordered timestamps easily.
+      for (const asset of assets) {
+        const mediaType = asset.type.includes("video") ? "video" : "image";
+        await createStory(asset.uri, mediaType);
+      }
+      Alert.alert("Success", assets.length > 1 ? "Stories added!" : "Story added!");
     } catch (error: any) {
-      console.error("Error creating story:", error);
-      Alert.alert("Error", error.message || "Failed to create story");
+      console.error("Error creating stories:", error);
+      Alert.alert("Error", error.message || "Failed to create stories");
     } finally {
       setIsUploading(false);
     }
@@ -279,11 +288,13 @@ const Stories = () => {
           {/* Other Users' Stories */}
           {userStories
             .filter((u) => u.userId !== user?.uid)
-            .map((userStory, index) => (
+            .map((userStory) => {
+              const originalIndex = userStories.findIndex(u => u.userId === userStory.userId);
+              return (
               <TouchableOpacity
                 key={userStory.userId}
                 style={styles.storyCircle}
-                onPress={() => openStory(index + 1, 0)}
+                onPress={() => openStory(originalIndex, 0)}
               >
                 <View
                   style={[
@@ -308,7 +319,8 @@ const Stories = () => {
                   {userStory.userName.split(" ")[0]}
                 </Text>
               </TouchableOpacity>
-            ))}
+              );
+            })}
         </ScrollView>
       </View>
 

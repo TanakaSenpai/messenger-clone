@@ -8,6 +8,7 @@ import ExploreScreen from "../screens/ExploreScreen";
 import CreatePostScreen from "../screens/CreatePostScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import ChatNavigator from "./ChatNavigator";
+import MenuNavigator from "app/navigation/MenuNavigator";
 import colors from "app/configs/colors";
 
 const TabNavigator = () => {

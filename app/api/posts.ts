@@ -16,13 +16,19 @@ import * as FileSystem from "expo-file-system";
 import { base64ToBytes } from "./storageSupabase";
 import { auth } from "app/configs/firebase";
 
+export interface PostMedia {
+  url: string;
+  type: "image" | "video";
+}
+
 export interface Post {
   id: string;
   userId: string;
   userName: string;
   userAvatar: string;
-  mediaUrl: string;
-  mediaType: "image" | "video";
+  mediaUrl?: string; // legacy support
+  mediaType?: "image" | "video"; // legacy support
+  mediaItems?: PostMedia[];
   caption: string;
   likesCount: number;
   commentsCount: number;
@@ -50,7 +56,7 @@ export const uploadPostMedia = async (uri: string, uid: string): Promise<string>
 
   if (!bytes) throw new Error("Could not read media data");
 
-  const fileName = `${uid}-${Date.now()}.jpg`;
+  const fileName = `${uid}-${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
   const path = `${uid}/${fileName}`;
 
   const { error: uploadError } = await supabase.storage
@@ -67,21 +73,30 @@ export const uploadPostMedia = async (uri: string, uid: string): Promise<string>
 };
 
 export const createPost = async (
-  mediaUri: string,
-  mediaType: "image" | "video",
+  assets: { uri: string; type: "image" | "video" }[],
   caption: string
 ) => {
   const user = auth.currentUser;
   if (!user) throw new Error("Not authenticated");
 
-  const mediaUrl = await uploadPostMedia(mediaUri, user.uid);
+  const mediaItems: PostMedia[] = [];
+
+  for (const asset of assets) {
+    const mediaUrl = await uploadPostMedia(asset.uri, user.uid);
+    mediaItems.push({
+      url: mediaUrl,
+      type: asset.type,
+    });
+  }
 
   const postData = {
     userId: user.uid,
     userName: user.displayName || "Unknown",
     userAvatar: user.photoURL || "",
-    mediaUrl,
-    mediaType,
+    mediaItems,
+    // Add legacy fields using first item
+    mediaUrl: mediaItems[0]?.url || "",
+    mediaType: mediaItems[0]?.type || "image",
     caption,
     likesCount: 0,
     commentsCount: 0,
@@ -100,10 +115,16 @@ export const subscribeToFeedPosts = (callback: (posts: Post[]) => void) => {
       ...doc.data(),
     })) as Post[];
     callback(posts);
+  }, (err) => {
+    console.error("[subscribeToFeedPosts] Error:", err.message);
   });
 };
 
 export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) => void) => {
+  if (!userId) {
+    callback([]);
+    return () => {};
+  }
   const q = query(
     collection(db, "posts"),
     where("userId", "==", userId),
@@ -115,6 +136,11 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
       ...doc.data(),
     })) as Post[];
     callback(posts);
+  }, (err) => {
+    console.error("[subscribeToUserPosts] Error:", err.message);
+    if (err.message.includes("requires an index")) {
+        console.warn("Index missing for posts query. Click the link above to fix.");
+    }
   });
 };
 

@@ -10,6 +10,8 @@ export type RootStackParamList = {
     Explore: undefined;
     CreatePost: undefined;
     Profile: { userId?: string };
+    Menu: undefined;
+    Settings: undefined;
 }
 
 export type AuthStackParamList = {

@@ -48,6 +48,8 @@ export const subscribeToLikes = (postId: string, callback: (likesCount: number, 
     const likesCount = snapshot.size;
     const isLiked = snapshot.docs.some(doc => doc.id === `${postId}_${user.uid}`);
     callback(likesCount, isLiked);
+  }, (err) => {
+    console.error("[subscribeToLikes] Firestore error:", err);
   });
 };
 

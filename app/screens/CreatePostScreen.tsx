@@ -9,6 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -26,8 +27,7 @@ interface Props {
 }
 
 const CreatePostScreen = ({ navigation }: Props) => {
-  const [mediaUri, setMediaUri] = useState<string | null>(null);
-  const [mediaType, setMediaType] = useState<"image" | "video">("image");
+  const [mediaAssets, setMediaAssets] = useState<{ uri: string; type: "image" | "video" }[]>([]);
   const [caption, setCaption] = useState("");
   const [isUploading, setIsUploading] = useState(false);
 
@@ -45,20 +45,20 @@ const CreatePostScreen = ({ navigation }: Props) => {
       const result = source === "camera"
         ? await ImagePicker.launchCameraAsync({
             mediaTypes: ["images", "videos"],
-            allowsEditing: true,
-            aspect: [1, 1],
+            allowsMultipleSelection: true,
             quality: 0.8,
           })
         : await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ["images", "videos"],
-            allowsEditing: true,
-            aspect: [1, 1],
+            allowsMultipleSelection: true,
             quality: 0.8,
           });
 
-      if (!result.canceled && result.assets[0]) {
-        setMediaUri(result.assets[0].uri);
-        setMediaType(result.assets[0].type === "video" ? "video" : "image");
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setMediaAssets(result.assets.map(a => ({
+          uri: a.uri,
+          type: (a.type as "image" | "video") || "image"
+        })));
       }
     } catch (error) {
       console.error("Error picking media:", error);
@@ -67,18 +67,18 @@ const CreatePostScreen = ({ navigation }: Props) => {
   };
 
   const handleShare = async () => {
-    if (!mediaUri) {
-      Alert.alert("Error", "Please select a photo or video.");
+    if (mediaAssets.length === 0) {
+      Alert.alert("Error", "Please select at least one photo or video.");
       return;
     }
 
     setIsUploading(true);
     try {
-      await createPost(mediaUri, mediaType, caption);
+      await createPost(mediaAssets, caption);
       Alert.alert("Success", "Post shared successfully!", [
         { text: "OK", onPress: () => navigation.navigate("Feed") }
       ]);
-      setMediaUri(null);
+      setMediaAssets([]);
       setCaption("");
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to share post.");
@@ -101,8 +101,14 @@ const CreatePostScreen = ({ navigation }: Props) => {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.mediaPreviewContainer}>
-          {mediaUri ? (
-            <Image source={{ uri: mediaUri }} style={styles.mediaPreview} />
+          {mediaAssets.length > 0 ? (
+            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
+              {mediaAssets.map((asset, index) => (
+                <View key={index} style={styles.mediaPreviewItem}>
+                  <Image source={{ uri: asset.uri }} style={styles.mediaPreview} />
+                </View>
+              ))}
+            </ScrollView>
           ) : (
             <View style={styles.placeholderContainer}>
               <TouchableOpacity style={styles.pickerButton} onPress={() => pickMedia("gallery")}>
@@ -128,9 +134,9 @@ const CreatePostScreen = ({ navigation }: Props) => {
           />
         </View>
 
-        {mediaUri && (
-          <TouchableOpacity style={styles.changeButton} onPress={() => setMediaUri(null)}>
-            <Text style={styles.changeButtonText}>Change Media</Text>
+        {mediaAssets.length > 0 && (
+          <TouchableOpacity style={styles.changeButton} onPress={() => setMediaAssets([])}>
+            <Text style={styles.changeButtonText}>Clear Media</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
@@ -183,6 +189,10 @@ const styles = StyleSheet.create({
     width: "100%",
     aspectRatio: 1,
     backgroundColor: "#1a1a1a",
+  },
+  mediaPreviewItem: {
+    width: Dimensions.get("window").width,
+    aspectRatio: 1,
   },
   mediaPreview: {
     width: "100%",

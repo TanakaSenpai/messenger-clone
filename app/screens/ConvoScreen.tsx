@@ -40,7 +40,8 @@ import { supabase } from "app/configs/supabase";
 import { Video, ResizeMode } from "expo-av";
 import { useContext, useMemo } from "react";
 import { AuthContext } from "app/auth/context";
-import { serverTimestamp, Timestamp } from "firebase/firestore";
+import { serverTimestamp, Timestamp, getDoc, doc } from "firebase/firestore";
+import { db } from "app/configs/firebase";
 
 interface Message {
   // Exact schema fields
@@ -88,6 +89,8 @@ const ConvoScreen = ({
   // Cache signed URLs across renders
   const signedUrlCache = useRef<Map<string, string>>(new Map());
 
+  const [targetProfile, setTargetProfile] = useState<any>(null);
+
   const [viewer, setViewer] = useState<{
     visible: boolean;
     type: "image" | "video";
@@ -124,6 +127,22 @@ const ConvoScreen = ({
   const { user: currentUser } = useContext(AuthContext);
   const otherUserUid = String(chat.id);
 
+  // Fetch full profile info for messenger-style intro
+  useEffect(() => {
+    if (!otherUserUid || otherUserUid === "undefined") return;
+    const fetchProfile = async () => {
+      try {
+        const snap = await getDoc(doc(db, "userInfo", otherUserUid));
+        if (snap.exists()) {
+          setTargetProfile(snap.data());
+        }
+      } catch (error) {
+        console.error("Error fetching target profile for intro", error);
+      }
+    };
+    fetchProfile();
+  }, [otherUserUid]);
+
   // Keep ref in sync with input state
   useEffect(() => {
     inputTextRef.current = inputText;
@@ -138,12 +157,16 @@ const ConvoScreen = ({
 
   const conversationId = useMemo(() => {
     const otherId = String(chat.id);
-    const me = currentUser?.uid ?? "anonymous";
+    const me = currentUser?.uid;
+    if (!me || !otherId || otherId === "undefined" || otherId === "null") {
+      console.error("[ConvoScreen] Invalid participant IDs", { me, otherId });
+      return null;
+    }
     return buildConversationId(me, otherId);
   }, [chat.id, currentUser?.uid]);
 
   useEffect(() => {
-    if (!currentUser?.uid) return;
+    if (!conversationId || !currentUser?.uid) return;
     let unsubscribe: (() => void) | undefined;
     // signedUrlCache is kept between renders
     (async () => {
@@ -265,7 +288,7 @@ const ConvoScreen = ({
 
   // When viewing this conversation, mark latest other-user message as seen
   useEffect(() => {
-    if (!currentUser?.uid) return;
+    if (!currentUser?.uid || !conversationId) return;
     const lastIncoming = [...messages].reverse().find((m) => m.user.id !== currentUser.uid);
     if (lastIncoming && lastIncoming.id && lastIncoming.status !== "seen") {
       try { markMessageSeen(conversationId, lastIncoming.id); } catch {}
@@ -320,6 +343,7 @@ const ConvoScreen = ({
     setMessages((prev) => [...prev, tempMessage]);
 
     try {
+      if (!conversationId) throw new Error("Conversation ID is null");
       // Send message to Firebase
       await sendMessageToConversation(conversationId, text, {
         uid: currentUser.uid,
@@ -405,6 +429,7 @@ const ConvoScreen = ({
         } as Message,
       ]);
 
+      if (!conversationId) throw new Error("Conversation ID is null");
       const { path } = await uploadFileFromUriSupabase({
         fileUri: localUri,
         kind: "image",
@@ -490,6 +515,7 @@ const ConvoScreen = ({
       };
       setMessages((prev) => [...prev, tempMessage]);
 
+      if (!conversationId) throw new Error("Conversation ID is null");
       // Upload to Supabase Storage and get storage path (we'll sign it to view)
       const { path } = await uploadFileFromUriSupabase({
         fileUri: localUri,
@@ -570,6 +596,7 @@ const ConvoScreen = ({
         } as Message,
       ]);
 
+      if (!conversationId) throw new Error("Conversation ID is null");
       // Upload
       const { path } = await uploadFileFromUriSupabase({
         fileUri: localUri,
@@ -659,6 +686,7 @@ const ConvoScreen = ({
       };
       setMessages((prev) => [...prev, tempMessage]);
 
+      if (!conversationId) throw new Error("Conversation ID is null");
       const { path } = await uploadFileFromUriSupabase({
         fileUri: localUri,
         kind: "video",
@@ -726,6 +754,35 @@ const ConvoScreen = ({
     if (prevDate.toDateString() !== currDate.toDateString()) return true;
     const FIFTEEN_MINUTES = 15 * 60 * 1000;
     return Math.abs(currDate.getTime() - prevDate.getTime()) >= FIFTEEN_MINUTES;
+  };
+
+  const renderProfileIntro = () => {
+    return (
+      <View style={styles.profileIntroContainer}>
+        {targetProfile?.avatar || chat.avatar ? (
+          <Image
+            source={{ uri: targetProfile?.avatar || chat.avatar }}
+            style={styles.profileIntroAvatar}
+          />
+        ) : (
+          <View style={styles.profileIntroAvatarPlaceholder}>
+            <Text style={styles.profileIntroAvatarText}>
+              {chat.name.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        )}
+        <Text style={styles.profileIntroName}>{chat.name}</Text>
+        {targetProfile?.username ? (
+           <Text style={styles.profileIntroSubtitle}>@{targetProfile.username}</Text>
+        ) : null}
+        {targetProfile?.address ? (
+          <Text style={styles.profileIntroSubtitle}>Lives in {targetProfile.address}</Text>
+        ) : null}
+        <TouchableOpacity style={styles.profileIntroButton}>
+          <Text style={styles.profileIntroButtonText}>View Profile</Text>
+        </TouchableOpacity>
+      </View>
+    );
   };
 
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
@@ -1074,7 +1131,7 @@ const ConvoScreen = ({
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <KeyboardAvoidingView
         style={styles.flex1}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -1119,6 +1176,7 @@ const ConvoScreen = ({
             style={styles.messagesList}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.messagesContentContainer}
+            ListHeaderComponent={renderProfileIntro}
             keyboardShouldPersistTaps="handled"
             onScroll={handleScroll}
             scrollEventThrottle={16}
@@ -1267,7 +1325,7 @@ const ConvoScreen = ({
           </Modal>
         )}
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -1422,6 +1480,55 @@ const styles = StyleSheet.create({
     color: "#8E8E93",
     fontSize: 12,
     textAlign: "right",
+  },
+  profileIntroContainer: {
+    alignItems: "center",
+    paddingTop: 40,
+    paddingBottom: 15,
+    marginBottom: 5,
+  },
+  profileIntroAvatar: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    marginBottom: 10,
+  },
+  profileIntroAvatarPlaceholder: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: "#333",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  profileIntroAvatarText: {
+    color: "#fff",
+    fontSize: 32,
+    fontWeight: "bold",
+  },
+  profileIntroName: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 2,
+  },
+  profileIntroSubtitle: {
+    color: "#8E8E93",
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  profileIntroButton: {
+    marginTop: 12,
+    backgroundColor: "#333",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  profileIntroButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
 
