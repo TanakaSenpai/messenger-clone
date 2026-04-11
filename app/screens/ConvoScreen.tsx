@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  SafeAreaView,
   Animated,
   Easing,
   LayoutChangeEvent,
@@ -17,8 +18,6 @@ import {
   Modal,
   ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-
 import { PanResponder } from "react-native";
 import { RouteProp } from "@react-navigation/native";
 import { RootStackParamList } from "app/navigation/types";
@@ -32,6 +31,7 @@ import {
   subscribeToMessages,
   ChatMessageRecord,
   sendMediaMessageToConversation,
+  sendAlbumMessageToConversation,
   markMessageSent,
   markMessageSeen,
 } from "app/api/messages";
@@ -49,9 +49,11 @@ interface Message {
   conversationId?: string;
   senderId?: string;
   receiverId?: string;
-  type?: "text" | "image" | "video" | "file";
+  type?: "text" | "image" | "video" | "file" | "album";
   content?: string | null;
   mediaUrl?: string | null;
+  mediaUrls?: string[];
+  mediaTypes?: ("image" | "video")[];
   status?: "sent" | "delivered" | "seen";
   createdAtTS?: Timestamp;
   sentAtTS?: Timestamp | null;
@@ -202,14 +204,19 @@ const ConvoScreen = ({
             name: r.senderId === currentUser.uid ? "You" : (chat.name as string),
             avatar: r.senderId === currentUser.uid ? undefined : (chat.avatar as any),
           },
+          type: (r as any).type,
           mediaUrl: (r as any).mediaUrl ?? null,
-          mediaType: (r as any).type === "image" || (r as any).type === "video" ? (r as any).type : undefined,
+          mediaUrls: (r as any).mediaUrls ?? [],
+          mediaTypes: (r as any).mediaTypes ?? [],
+          mediaType: (r as any).type === "image" || (r as any).type === "video" 
+            ? (r as any).type 
+            : undefined,
         }));
 
         // Generate signed URLs for private bucket paths (images and videos)
         mapped.forEach(async (m) => {
+          // Handle single mediaUrl
           if (m.mediaUrl && m.mediaType && !/^https?:\/\//.test(m.mediaUrl)) {
-            // Normalize object key: remove bucket prefix if present
             let path = m.mediaUrl.trim();
             if (path.startsWith(`${BUCKET}/`)) {
               path = path.slice(`${BUCKET}/`.length);
@@ -231,7 +238,7 @@ const ConvoScreen = ({
             try {
               const { data, error } = await supabase.storage
                 .from(BUCKET)
-                .createSignedUrl(path, 60 * 60); // 1 hour
+                .createSignedUrl(path, 60 * 60);
               if (!error && data?.signedUrl) {
                 signedUrlCache.current.set(path, data.signedUrl);
                 setMessages((prev) =>
@@ -239,11 +246,61 @@ const ConvoScreen = ({
                     pm.id === m.id ? { ...pm, mediaUrl: data.signedUrl } : pm
                   )
                 );
-              } else {
-                console.error("Failed to create signed URL", { path, error });
               }
             } catch (err) {
               console.error("Exception creating signed URL", { path, err });
+            }
+          }
+
+          // Handle album mediaUrls
+          if (m.mediaUrls && m.mediaUrls.length > 0) {
+            const updatedUrls: string[] = [];
+            for (let i = 0; i < m.mediaUrls.length; i++) {
+              const url = m.mediaUrls[i];
+              if (!url) {
+                updatedUrls.push("");
+                continue;
+              }
+              if (/^https?:\/\//.test(url)) {
+                updatedUrls.push(url);
+                continue;
+              }
+              let path = url.trim();
+              if (path.startsWith(`${BUCKET}/`)) {
+                path = path.slice(`${BUCKET}/`.length);
+              } else if (
+                BUCKET === "conversations" &&
+                path.startsWith("conversations/")
+              ) {
+                path = path.slice("conversations/".length);
+              }
+              const cached = signedUrlCache.current.get(path);
+              if (cached) {
+                updatedUrls.push(cached);
+              } else {
+                try {
+                  const { data, error } = await supabase.storage
+                    .from(BUCKET)
+                    .createSignedUrl(path, 60 * 60);
+                  if (!error && data?.signedUrl) {
+                    signedUrlCache.current.set(path, data.signedUrl);
+                    updatedUrls.push(data.signedUrl);
+                  } else {
+                    updatedUrls.push(url);
+                  }
+                } catch (err) {
+                  console.error("Exception creating signed URL for album", { path, err });
+                  updatedUrls.push(url);
+                }
+              }
+            }
+            const originalUrls = m.mediaUrls || [];
+            if (updatedUrls.some((u, i) => u !== originalUrls[i])) {
+              setMessages((prev) =>
+                prev.map((pm) =>
+                  pm.id === m.id ? { ...pm, mediaUrls: updatedUrls } : pm
+                )
+              );
             }
           }
         });
@@ -566,10 +623,75 @@ const ConvoScreen = ({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images", "videos"],
         quality: 0.85,
-        allowsMultipleSelection: false,
+        allowsMultipleSelection: true,
       });
-      if (result.canceled) return;
-      const asset = result.assets?.[0];
+      if (result.canceled || !result.assets?.length) return;
+
+      const assets = result.assets;
+      
+      // If multiple media, send as album
+      if (assets.length > 1) {
+        const tempId = `temp-album-${Date.now()}`;
+        setUploadingMap((m) => ({ ...m, [tempId]: true }));
+        
+        // Show temp album message
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: tempId,
+            text: "",
+            timestamp: new Date(),
+            user: {
+              id: currentUser.uid,
+              name: currentUser.firstName
+                ? `${currentUser.firstName} ${currentUser.lastName}`
+                : currentUser.email,
+              avatar: currentUser.avatar,
+            },
+            mediaUrl: assets[0].uri,
+            mediaType: "image" as const,
+          } as Message,
+        ]);
+
+        if (!conversationId) throw new Error("Conversation ID is null");
+
+        // Upload all files and collect paths
+        const mediaList: { url: string; type: "image" | "video" }[] = [];
+        for (const asset of assets) {
+          const { path } = await uploadFileFromUriSupabase({
+            fileUri: asset.uri,
+            kind: asset.type === "video" ? "video" : "image",
+            conversationId,
+            uploaderUid: currentUser.uid,
+          });
+          mediaList.push({ url: path, type: asset.type === "video" ? "video" : "image" });
+        }
+
+        // Send album message
+        await sendAlbumMessageToConversation(
+          conversationId,
+          mediaList,
+          "",
+          {
+            uid: currentUser.uid,
+            name: currentUser.firstName
+              ? `${currentUser.firstName} ${currentUser.lastName}`
+              : currentUser.email,
+            avatar: currentUser.avatar,
+          }
+        );
+
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        setUploadingMap((m) => {
+          const { [tempId]: _, ...rest } = m;
+          return rest;
+        });
+        setSentFooter('Sent');
+        return;
+      }
+
+      // Single media - use existing logic
+      const asset = assets[0];
       if (!asset?.uri) return;
 
       const localUri = asset.uri;
@@ -832,7 +954,7 @@ const ConvoScreen = ({
               flex: 1,
             }}
           >
-            {item.mediaUrl ? (
+            {item.mediaUrl && item.type !== "album" && item.mediaType ? (
               item.mediaType === "image" ? (
                 <TouchableOpacity
                   activeOpacity={0.85}
@@ -1045,6 +1167,57 @@ const ConvoScreen = ({
                 </TouchableOpacity>
               )
             ) : null}
+
+            {/* Album (multiple media) */}
+            {(item.mediaUrls?.length ?? 0) > 1 && (
+              <View style={styles.albumContainer}>
+                <View style={styles.albumGrid}>
+                  {item.mediaUrls?.slice(0, 4).map((url, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      activeOpacity={0.85}
+                      onPress={() => {
+                        const mediaType = item.mediaTypes?.[idx] === "video" ? "video" : "image";
+                        setViewer({
+                          visible: true,
+                          type: mediaType,
+                          uri: url,
+                        });
+                      }}
+                    >
+                      <View style={styles.albumImageWrapper}>
+                        {item.mediaTypes?.[idx] === "video" ? (
+                          <Video
+                            source={{ uri: url }}
+                            style={styles.albumImage}
+                            resizeMode={ResizeMode.COVER}
+                            isLooping
+                          />
+                        ) : (
+                          <Image
+                            source={{ uri: url }}
+                            style={styles.albumImage}
+                            resizeMode="cover"
+                          />
+                        )}
+                        {item.mediaTypes?.[idx] === "video" && (
+                          <View style={styles.albumPlayIcon}>
+                            <Ionicons name="play" size={20} color="#fff" />
+                          </View>
+                        )}
+                        {idx === 3 && (item.mediaUrls?.length ?? 0) > 4 && (
+                          <View style={styles.albumMoreOverlay}>
+                            <Text style={styles.albumMoreText}>
+                              +{((item.mediaUrls?.length ?? 0) - 4)}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
 
             {!!item.text && (
               <View
@@ -1528,6 +1701,51 @@ const styles = StyleSheet.create({
   profileIntroButtonText: {
     color: "#fff",
     fontSize: 14,
+    fontWeight: "600",
+  },
+  // Album styles
+  albumContainer: {
+    marginBottom: 4,
+  },
+  albumGrid: {
+    width: 220,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  albumImageWrapper: {
+    width: 110,
+    height: 110,
+    position: "relative",
+  },
+  albumImage: {
+    width: "100%",
+    height: "100%",
+  },
+  albumPlayIcon: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    marginTop: -12,
+    marginLeft: -12,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 15,
+    padding: 4,
+  },
+  albumMoreOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  albumMoreText: {
+    color: "#fff",
+    fontSize: 18,
     fontWeight: "600",
   },
 });

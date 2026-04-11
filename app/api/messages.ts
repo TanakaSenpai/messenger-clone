@@ -18,9 +18,11 @@ export type ChatMessageRecord = {
   conversationId: string; // which chat this belongs to
   senderId: string; // user who sent it
   receiverId: string; // user who should get it
-  type: "text" | "image" | "video" | "file"; // message type
+  type: "text" | "image" | "video" | "file" | "album"; // message type
   content: string | null; // actual text (null if media)
-  mediaUrl: string | null; // signed URL or storage path
+  mediaUrl: string | null; // single media URL (for backward compatibility)
+  mediaUrls: string[]; // multiple media URLs
+  mediaTypes: ("image" | "video")[]; // types for each media item
   status: "sent" | "delivered" | "seen";
   createdAt: Timestamp; // when message was created (client)
   sentAt: Timestamp | null; // when stored in server
@@ -155,6 +157,8 @@ export const sendMessageToConversation = async (
       type: "text",
       content: text,
       mediaUrl: null,
+      mediaUrls: [],
+      mediaTypes: [],
       status: "delivered",
       createdAt: Timestamp.fromDate(createdAtClient ?? new Date()),
       sentAt: null,
@@ -236,6 +240,8 @@ export const sendMediaMessageToConversation = async (
       type: media.type,
       content: null,
       mediaUrl: media.url,
+      mediaUrls: [media.url],
+      mediaTypes: [media.type],
       status: "delivered",
       createdAt: Timestamp.fromDate(createdAtClient ?? new Date()),
       sentAt: null,
@@ -261,6 +267,94 @@ export const sendMediaMessageToConversation = async (
     }
   } catch (error) {
     console.error(`[sendMediaMessageToConversation] Error:`, error);
+    throw error;
+  }
+};
+
+// Send multiple media messages (album)
+export const sendAlbumMessageToConversation = async (
+  conversationId: string,
+  mediaList: { url: string; type: "image" | "video" }[],
+  caption: string,
+  sender: { uid: string; name?: string; avatar?: string },
+  createdAtClient?: Date
+) => {
+  try {
+    const convoRef = doc(db, "conversations", conversationId);
+    const msgsRef = collection(db, "conversations", conversationId, "messages");
+
+    let convoSnap;
+    let conversationExists = false;
+    try {
+      convoSnap = await getDoc(convoRef);
+      conversationExists = convoSnap.exists();
+    } catch (error) {
+      conversationExists = false;
+    }
+
+    if (conversationExists && convoSnap) {
+      const convoData = convoSnap.data();
+      if (
+        !convoData ||
+        !convoData.participants ||
+        !convoData.participants.includes(sender.uid)
+      ) {
+        throw new Error(
+          `User ${sender.uid} is not a participant in conversation ${conversationId}`
+        );
+      }
+    }
+
+    const participants = conversationId.split("__");
+    const [a, b] = participants;
+    if (!a || a === "undefined" || a === "null" || !b || b === "undefined" || b === "null") {
+      throw new Error(`Corrupted conversationId detected in album send: ${conversationId}`);
+    }
+    const receiverId = sender.uid === a ? b : a;
+
+    const newDocRef = doc(msgsRef);
+    const mediaUrls = mediaList.map(m => m.url);
+    const mediaTypes = mediaList.map(m => m.type);
+    const hasVideo = mediaTypes.includes("video");
+
+    const messageData: ChatMessageRecord = {
+      id: newDocRef.id,
+      conversationId,
+      senderId: sender.uid,
+      receiverId,
+      type: "album",
+      content: caption || null,
+      mediaUrl: mediaUrls[0] || null,
+      mediaUrls,
+      mediaTypes,
+      status: "delivered",
+      createdAt: Timestamp.fromDate(createdAtClient ?? new Date()),
+      sentAt: null,
+      deliveredAt: serverTimestamp() as any,
+      seenAt: null,
+    };
+
+    const previewText = hasVideo 
+      ? `[Video${mediaUrls.length > 1 ? ` +${mediaUrls.length - 1}` : ''}]`
+      : `[${mediaUrls.length} Photo${mediaUrls.length > 1 ? 's' : ''}]`;
+
+    if (!conversationExists) {
+      await setDoc(convoRef, {
+        participants,
+        createdAt: serverTimestamp(),
+        lastMessage: caption || previewText,
+        lastMessageAt: serverTimestamp(),
+      });
+      await setDoc(newDocRef, messageData as any);
+    } else {
+      await setDoc(newDocRef, messageData as any);
+      await updateDoc(convoRef, {
+        lastMessage: caption || previewText,
+        lastMessageAt: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    console.error(`[sendAlbumMessageToConversation] Error:`, error);
     throw error;
   }
 };
